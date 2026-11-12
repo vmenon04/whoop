@@ -54,6 +54,17 @@ async def apply_app_config(session_factory: SessionFactory, settings: Settings) 
         current = await session.get(AppConfig, 1)
         if current is not None and current.local_timezone == settings.local_timezone:
             return
+        running = await session.scalar(
+            text("SELECT name FROM experiments WHERE status = 'active' LIMIT 1")
+        )
+        if current is not None and running is not None:
+            # Experiment days are local calendar dates. Moving the zone mid-experiment
+            # would silently remap which morning belongs to which assigned day.
+            raise RuntimeError(
+                f"LOCAL_TIMEZONE changed from {current.local_timezone} to "
+                f"{settings.local_timezone} while experiment {running!r} is running. "
+                "Set it back, or wait until the experiment has completed."
+            )
         values = {"local_timezone": settings.local_timezone}
         await session.execute(
             insert(AppConfig)

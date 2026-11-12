@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # Local hour at which a missing morning recovery triggers an alert.
     morning_alert_hour: int = Field(default=12, ge=0, le=23)
 
+    # Local hour from which tomorrow's arm may be assigned, and the hour of the daily analysis.
+    assign_hour: int = Field(default=20, ge=0, le=23)
+    analysis_hour: int = Field(default=13, ge=0, le=23)
+
     # Token refresh: check often, refresh only when little life remains.
     token_refresh_check_seconds: int = 300
     token_refresh_threshold_seconds: int = 1200

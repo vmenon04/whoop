@@ -12,13 +12,21 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 import httpx
+import numpy as np
 import typer
+from sqlalchemy import select, text
 
+from whoop_lab.analysis.inference import FloatArray
+from whoop_lab.analysis.pipeline import ResultRow, analyze_experiment, describe
+from whoop_lab.analysis.power import minimum_detectable_effect, summarize_baseline
+from whoop_lab.analysis.simulate import validate
 from whoop_lab.config import get_settings
 from whoop_lab.db import make_engine, make_session_factory
+from whoop_lab.experiments.outcomes import OUTCOMES
 from whoop_lab.ingest import sync as sync_module
 from whoop_lab.ingest.sync import SyncSummary
 from whoop_lab.log import configure_logging
+from whoop_lab.models import Experiment
 from whoop_lab.setup_db import setup_database
 from whoop_lab.whoop.client import WhoopClient
 
@@ -95,6 +103,138 @@ async def _setup_db() -> None:
 def setup_db() -> None:
     """Apply settings the database needs (timezone, Grafana role). Runs on every start."""
     asyncio.run(_setup_db())
+
+
+async def _baseline_values(outcome: str, baseline_days: int) -> FloatArray:
+    """The outcome on recent days that were not part of any experiment."""
+    settings = get_settings()
+    engine = make_engine(settings.db_url)
+    try:
+        async with make_session_factory(engine)() as session:
+            rows = (
+                await session.execute(
+                    text(
+                        f"SELECT o.{outcome} FROM daily_outcomes o "  # noqa: S608
+                        "WHERE o.local_date < (SELECT max(local_date) FROM daily_outcomes) "
+                        "AND NOT EXISTS (SELECT 1 FROM assignments a "
+                        "                WHERE a.local_date = o.local_date) "
+                        "ORDER BY o.local_date DESC LIMIT :days"
+                    ),
+                    {"days": baseline_days},
+                )
+            ).scalars()
+            values = [float("nan") if v is None else float(v) for v in rows]
+    finally:
+        await engine.dispose()
+    return np.array(values[::-1], dtype=float)
+
+
+@app.command()
+def power(
+    outcome: Annotated[str, typer.Option(help="Outcome metric.")] = "ln_hrv_rmssd",
+    days: Annotated[int, typer.Option(min=4, help="Planned assigned days.")] = 28,
+    block_size: Annotated[int, typer.Option(min=2)] = 4,
+    baseline_days: Annotated[int, typer.Option(min=10, help="Recent non-experiment days.")] = 60,
+) -> None:
+    """Print the minimum detectable effect for a design, from your baseline variability."""
+    if outcome not in OUTCOMES:
+        raise typer.BadParameter(f"choose one of: {', '.join(OUTCOMES)}")
+    if block_size % 2:
+        raise typer.BadParameter("block size must be even")
+    values = asyncio.run(_baseline_values(outcome, baseline_days))
+    try:
+        baseline = summarize_baseline(values)
+    except ValueError as exc:
+        typer.echo(f"Not enough baseline data yet: {exc}.", err=True)
+        raise typer.Exit(1) from None
+    result = minimum_detectable_effect(baseline, days=days, block_size=block_size)
+    info = OUTCOMES[outcome]
+    typer.echo(f"Outcome: {info.label} ({info.unit})")
+    typer.echo(
+        f"Baseline: {baseline.n_values} mornings over {baseline.n_days} days, "
+        f"SD {baseline.sigma:.3f}, day-to-day correlation {baseline.phi:.2f}, "
+        f"{baseline.missing_rate:.0%} missing"
+    )
+    typer.echo(f"Design: {days} days, blocks of {block_size}")
+    mde = result.minimum_detectable_effect
+    if mde is None:
+        typer.echo("No effect size reaches 80% power with this design. Plan more days.")
+        raise typer.Exit(1)
+    line = f"Minimum detectable effect at 80% power: {mde:.3f} {info.unit}"
+    line += f" ({mde / baseline.sigma:.2f} baseline SD"
+    if info.log_scale:
+        line += f", about {np.expm1(mde) * 100:.1f}%"
+    typer.echo(line + ")")
+
+
+async def _analyze(name_or_id: str) -> tuple[str, list[ResultRow]]:
+    settings = get_settings()
+    engine = make_engine(settings.db_url)
+    today = datetime.now(settings.tz).date()
+    try:
+        async with make_session_factory(engine)() as session, session.begin():
+            query = select(Experiment)
+            query = (
+                query.where(Experiment.id == int(name_or_id))
+                if name_or_id.isdigit()
+                else query.where(Experiment.name == name_or_id)
+            )
+            experiment = (await session.execute(query)).scalar_one_or_none()
+            if experiment is None:
+                raise typer.BadParameter(f"no experiment {name_or_id!r}")
+            if experiment.locked_at is None:
+                raise typer.BadParameter("that experiment is still a draft")
+            return experiment.name, await analyze_experiment(session, experiment, today)
+    finally:
+        await engine.dispose()
+
+
+@app.command()
+def analyze(experiment: Annotated[str, typer.Argument(help="Experiment name or id.")]) -> None:
+    """Compute results now and append them to experiment_results."""
+    name, rows = asyncio.run(_analyze(experiment))
+    typer.echo(name)
+    if not rows:
+        typer.echo("No assigned day has reached its outcome morning yet.")
+        return
+    for row in rows:
+        label = row.details.get("label", "")
+        typer.echo(f"\n{OUTCOMES[row.outcome_metric].label} · {row.method} [{label}]")
+        typer.echo(f"  {describe(row)}")
+        if "skipped" in row.details:
+            typer.echo(f"  not computed: {row.details['skipped']}")
+
+
+@app.command()
+def simulate(
+    sims: Annotated[int, typer.Option(min=200, help="Simulated experiments per check.")] = 2000,
+    phi: Annotated[float, typer.Option(help="AR(1) autocorrelation of the noise.")] = 0.4,
+) -> None:
+    """Validate the analysis on simulated data. Run before trusting any analysis change."""
+    report = validate(n_sims=sims, phi=phi)
+    checks = [
+        (
+            "Null calibration",
+            report.null_calibrated,
+            f"rejection rate {report.null_rejection_rate:.3f} at alpha 0.05 (want 0.03 to 0.07)",
+        ),
+        (
+            "Effect recovery",
+            report.effect_recovered,
+            f"mean estimate {report.mean_estimate:.4f} for a planted {report.planted_effect:.4f}; "
+            f"interval coverage {report.coverage:.3f} (want 0.93 to 0.97)",
+        ),
+        (
+            "Design match",
+            report.design_matched,
+            f"with the wrong block design the rejection rate is "
+            f"{report.mismatch_rejection_rate:.3f} (must fall outside 0.03 to 0.07)",
+        ),
+    ]
+    for title, ok, detail in checks:
+        typer.echo(f"{'PASS' if ok else 'FAIL'}  {title}: {detail}")
+    if not report.passed:
+        raise typer.Exit(1)
 
 
 def main() -> None:

@@ -54,6 +54,11 @@ async def test_scheduler_declares_jobs(
     session_factory: SessionFactory, http: httpx.AsyncClient, settings: Settings
 ) -> None:
     scheduler = build_scheduler(WorkerContext.create(settings, session_factory, http))
-    assert {"refresh_token", "process_events", "reconcile", "morning_recovery"} == {
-        job.id for job in scheduler.get_jobs()
-    }
+    assert {
+        "refresh_token",
+        "process_events",
+        "reconcile",
+        "morning_recovery",
+        "assign_tomorrow",
+        "daily_analysis",
+    } == {job.id for job in scheduler.get_jobs()}

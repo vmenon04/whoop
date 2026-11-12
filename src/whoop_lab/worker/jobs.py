@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from whoop_lab.experiments.jobs import assign_tomorrow, run_daily_analysis
 from whoop_lab.health import check_morning_recovery
 from whoop_lab.ingest.events import drain_events
 from whoop_lab.ingest.sync import SyncSummary, reconcile
@@ -43,3 +44,11 @@ async def reconcile_job(ctx: WorkerContext) -> SyncSummary:
 
 async def morning_recovery_job(ctx: WorkerContext) -> bool:
     return await check_morning_recovery(ctx.session_factory, ctx.settings, http=ctx.http)
+
+
+async def assign_tomorrow_job(ctx: WorkerContext) -> bool:
+    return (await assign_tomorrow(ctx.session_factory, ctx.settings, http=ctx.http)) is not None
+
+
+async def daily_analysis_job(ctx: WorkerContext) -> int:
+    return len(await run_daily_analysis(ctx.session_factory, ctx.settings))

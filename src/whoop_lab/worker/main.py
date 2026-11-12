@@ -69,6 +69,22 @@ def build_scheduler(ctx: WorkerContext) -> AsyncIOScheduler:
         timezone=settings.tz,
         id="morning_recovery",
     )
+    # Runs all evening so a restart or a late lock still gets tomorrow assigned.
+    scheduler.add_job(
+        _guarded(jobs.assign_tomorrow_job, ctx),
+        "interval",
+        minutes=15,
+        next_run_time=now + timedelta(minutes=2),
+        id="assign_tomorrow",
+    )
+    scheduler.add_job(
+        _guarded(jobs.daily_analysis_job, ctx),
+        "cron",
+        hour=settings.analysis_hour,
+        minute=0,
+        timezone=settings.tz,
+        id="daily_analysis",
+    )
     return scheduler
 
 
