@@ -6,7 +6,7 @@ import asyncio
 import logging
 import signal
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -53,6 +53,13 @@ def build_scheduler(ctx: WorkerContext) -> AsyncIOScheduler:
         "interval",
         seconds=settings.event_poll_seconds,
         id="process_events",
+    )
+    scheduler.add_job(
+        _guarded(jobs.reconcile_job, ctx),
+        "interval",
+        hours=settings.reconcile_interval_hours,
+        next_run_time=now + timedelta(minutes=1),
+        id="reconcile",
     )
     return scheduler
 

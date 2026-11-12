@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from whoop_lab.ingest.events import drain_events
+from whoop_lab.ingest.sync import SyncSummary, reconcile
 from whoop_lab.notify import notify
 from whoop_lab.whoop.oauth import RefreshOutcome, refresh_if_needed
 from whoop_lab.worker.context import WorkerContext
@@ -30,3 +31,10 @@ async def refresh_token_job(ctx: WorkerContext) -> RefreshOutcome:
 
 async def process_events_job(ctx: WorkerContext) -> int:
     return await drain_events(ctx.session_factory, ctx.whoop, ctx.settings)
+
+
+async def reconcile_job(ctx: WorkerContext) -> SyncSummary:
+    """Cycle poll plus trailing-window reconciliation of every collection."""
+    return await reconcile(
+        ctx.whoop, ctx.session_factory, window_days=ctx.settings.reconcile_window_days
+    )
