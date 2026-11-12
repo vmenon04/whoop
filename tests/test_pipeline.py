@@ -126,6 +126,12 @@ async def test_every_method_is_reported_and_labelled(session_factory: SessionFac
     adjusted = results[(METHOD_ADJUSTED, "ln_hrv_rmssd")]
     assert adjusted.effect == pytest.approx(0.2, abs=0.06)
     assert adjusted.details["standard_errors"] == "HC3"
+    assert adjusted.details["quantiles"] == "t"
+    assert adjusted.details["ignores_blocks"] is True
+    assert adjusted.effect is not None
+    assert adjusted.ci_low is not None
+    assert adjusted.ci_high is not None
+    assert adjusted.ci_low < adjusted.effect < adjusted.ci_high
     assert "after assignment" in adjusted.details["caveat"]
     assert "biased" in results[(METHOD_PER_PROTOCOL, "ln_hrv_rmssd")].details["label"]
     assert "exploratory" in results[(METHOD_EXPLORATORY, "resting_heart_rate")].details["label"]
@@ -276,6 +282,32 @@ def test_describe_never_claims_proof() -> None:
     assert "1 mornings missing" in sentence
     assert "prove" not in sentence.lower()
     assert "significant" not in sentence.lower()
+
+
+async def test_intervals_use_the_alpha_fixed_in_the_spec(session_factory: SessionFactory) -> None:
+    experiment_id = await lock_and_assign(session_factory)
+    await add_outcomes(session_factory, await arms(session_factory, experiment_id), effect=0.1)
+    at_95 = await analyze(session_factory, experiment_id)
+    async with session_factory() as session, session.begin():
+        # A stand-in for a spec locked with alpha 0.10 (TRUNCATE-style bypass of the guard).
+        await session.execute(text("ALTER TABLE experiments DISABLE TRIGGER experiments_guard"))
+        await session.execute(
+            text("UPDATE experiments SET analysis_spec = analysis_spec || '{\"alpha\": 0.1}'")
+        )
+        await session.execute(text("ALTER TABLE experiments ENABLE TRIGGER experiments_guard"))
+    at_90 = await analyze(session_factory, experiment_id)
+
+    for key in ((METHOD_PRIMARY, "ln_hrv_rmssd"), (METHOD_ADJUSTED, "ln_hrv_rmssd")):
+        wide, narrow = at_95[key], at_90[key]
+        assert wide.ci_low is not None
+        assert wide.ci_high is not None
+        assert narrow.ci_low is not None
+        assert narrow.ci_high is not None
+        assert narrow.effect == wide.effect
+        assert wide.ci_low < narrow.ci_low < narrow.ci_high < wide.ci_high
+        assert narrow.details["alpha"] == 0.1
+        assert "90% interval" in describe(narrow)
+        assert "95% interval" in describe(wide)
 
 
 # --- scheduled jobs -----------------------------------------------------------------------

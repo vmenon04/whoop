@@ -174,9 +174,15 @@ def _itt(
     )
 
 
-def _adjusted(due: pd.DataFrame, primary: ResultRow, outcome_key: str) -> ResultRow:
+def _adjusted(due: pd.DataFrame, primary: ResultRow, outcome_key: str, alpha: float) -> ResultRow:
     """OLS of the outcome on arm, the prior 7-day mean of the outcome, and day strain,
-    with HC3 standard errors. Secondary: it usually narrows the interval."""
+    with HC3 standard errors and t quantiles. Secondary.
+
+    The model knows nothing about the blocks. Blocking makes the real estimate
+    more precise than this model assumes, so its interval tends to be wider than
+    it needs to be, and it is not a way to get a narrower interval than the
+    primary analysis.
+    """
     data = pd.DataFrame(
         {
             "y": due[outcome_key],
@@ -193,6 +199,9 @@ def _adjusted(due: pd.DataFrame, primary: ResultRow, outcome_key: str) -> Result
         "label": "secondary",
         "covariates": ["prior_7d_mean", "day_strain"],
         "standard_errors": "HC3",
+        "quantiles": "t",
+        "alpha": alpha,
+        "ignores_blocks": True,
         "rows_dropped_for_missing_covariates": have_outcome - len(complete),
         "caveat": (
             "day_strain is measured after assignment; if the intervention changes "
@@ -220,8 +229,8 @@ def _adjusted(due: pd.DataFrame, primary: ResultRow, outcome_key: str) -> Result
         design = sm.add_constant(
             complete[["arm", "prior_7d_mean", "day_strain"]], has_constant="add"
         )
-        fit = sm.OLS(complete["y"], design).fit(cov_type="HC3")
-        low, high = fit.conf_int().loc["arm"]
+        fit = sm.OLS(complete["y"], design).fit(cov_type="HC3", use_t=True)
+        low, high = fit.conf_int(alpha=alpha).loc["arm"]
         row.effect = _finite(float(fit.params["arm"]))
         row.ci_low, row.ci_high = _finite(float(low)), _finite(float(high))
         row.p_value = _finite(float(fit.pvalues["arm"]))
@@ -250,7 +259,7 @@ def analyze_frame(frame: pd.DataFrame, experiment: Experiment, today: date) -> l
 
     primary = _itt(due, experiment, primary_key, METHOD_PRIMARY, seed)
     primary.details["label"] = "primary"
-    rows = [primary, _adjusted(due, primary, primary_key)]
+    rows = [primary, _adjusted(due, primary, primary_key, float(spec.get("alpha", 0.05)))]
 
     complied = due["complied"].map(lambda value: value is True)
     per_protocol = _itt(due, experiment, primary_key, METHOD_PER_PROTOCOL, seed + 1, mask=complied)
@@ -313,10 +322,11 @@ def describe(row: ResultRow | ExperimentResult) -> str:
     percent = row.details.get("percent_change")
     if percent is not None:
         parts[0] += f" (about {percent:+.1f}%)"
+    level = f"{(1 - float(row.details.get('alpha', 0.05))) * 100:g}%"
     if row.ci_low is not None and row.ci_high is not None:
-        parts.append(f"95% interval {_number(row.ci_low)} to {_number(row.ci_high)}")
+        parts.append(f"{level} interval {_number(row.ci_low)} to {_number(row.ci_high)}")
     elif row.effect is not None:
-        parts.append("95% interval not bounded yet")
+        parts.append(f"{level} interval not bounded yet")
     if row.p_value is not None:
         parts.append(f"p = {row.p_value:.3f}")
     parts.append(f"n = {row.n_treatment} treatment, {row.n_control} control")

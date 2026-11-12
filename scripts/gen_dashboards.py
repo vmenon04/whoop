@@ -312,7 +312,7 @@ EXPERIMENT_RESULTS = dashboard(
                 9,
                 [
                     series(
-                        "Running primary estimate with 95% interval (the end date is fixed; this is not a stopping rule)",
+                        "Running primary estimate with its interval (the end date is fixed; this is not a stopping rule)",
                         'SELECT computed_at AS time, effect AS estimate, ci_low AS "interval low", '
                         'ci_high AS "interval high" FROM experiment_results '
                         f"WHERE {THIS} AND method = 'itt_randomization' ORDER BY 1",
