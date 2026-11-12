@@ -19,7 +19,12 @@ from sqlalchemy import select, text
 from whoop_lab.analysis.inference import FloatArray
 from whoop_lab.analysis.pipeline import ResultRow, analyze_experiment, describe
 from whoop_lab.analysis.power import minimum_detectable_effect, summarize_baseline
-from whoop_lab.analysis.simulate import validate
+from whoop_lab.analysis.simulate import (
+    COVERAGE_BAND,
+    MIN_SHUFFLE_GAP,
+    REJECTION_BAND,
+    validate,
+)
 from whoop_lab.config import get_settings
 from whoop_lab.db import make_engine, make_session_factory
 from whoop_lab.experiments.outcomes import OUTCOMES
@@ -210,28 +215,53 @@ def simulate(
     sims: Annotated[
         int, typer.Option(min=2000, help="Simulated experiments per check (2,000 or more).")
     ] = 2000,
-    phi: Annotated[float, typer.Option(help="AR(1) autocorrelation of the noise.")] = 0.4,
+    phi: Annotated[
+        float,
+        typer.Option(
+            min=0.3,
+            max=0.6,
+            help="AR(1) autocorrelation of the noise. Without autocorrelation a wrong "
+            "test cannot be told from the right one, so lower values are refused.",
+        ),
+    ] = 0.4,
 ) -> None:
     """Validate the analysis on simulated data. Run before trusting any analysis change."""
     report = validate(n_sims=sims, phi=phi)
+    low, high = REJECTION_BAND
     checks = [
         (
             "Null calibration",
             report.null_calibrated,
-            f"rejection rate {report.null_rejection_rate:.3f} at alpha 0.05 (want 0.03 to 0.07)",
+            f"rejection rate {report.null_rejection_rate:.3f} at alpha 0.05 (want {low} to {high})",
         ),
         (
             "Effect recovery",
             report.effect_recovered,
             f"mean estimate {report.mean_estimate:.4f} for a planted {report.planted_effect:.4f}; "
-            f"interval coverage {report.coverage:.3f} (want 0.93 to 0.97)",
+            f"interval coverage {report.coverage:.3f} (want {COVERAGE_BAND[0]} to "
+            f"{COVERAGE_BAND[1]})",
         ),
         (
             "Design match",
             report.design_matched,
             f"with the wrong block design the rejection rate is "
-            f"{report.mismatch_rejection_rate:.3f} (must fall outside 0.03 to 0.07)",
+            f"{report.mismatch_rejection_rate:.3f} (must fall outside {low} to {high})",
         ),
+        (
+            "Plain shuffle told apart",
+            report.shuffle_told_apart,
+            f"a plain shuffle of labels rejects {report.shuffle_rejection_rate:.3f} on the same "
+            f"experiments (must be at least {MIN_SHUFFLE_GAP} below the real test)",
+        ),
+    ]
+    checks += [
+        (
+            f"Scenario: {scenario.name}",
+            scenario.passed,
+            f"rejection rate {scenario.null_rejection_rate:.3f}; mean estimate "
+            f"{scenario.mean_estimate:.4f}; coverage {scenario.coverage:.3f}",
+        )
+        for scenario in report.scenarios
     ]
     for title, ok, detail in checks:
         typer.echo(f"{'PASS' if ok else 'FAIL'}  {title}: {detail}")

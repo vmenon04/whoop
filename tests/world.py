@@ -36,8 +36,13 @@ def sleep_id_for(day: date) -> str:
 
 
 async def lock_and_assign(
-    session_factory: SessionFactory, *, planned_days: int = 28, **draft: Any
+    session_factory: SessionFactory,
+    *,
+    planned_days: int = 28,
+    calendar_days: int | None = None,
+    **draft: Any,
 ) -> int:
+    """`calendar_days`: how many evenings to run, when washout spreads the days out."""
     values: dict[str, Any] = {
         "name": "Caffeine cutoff",
         "hypothesis": "A noon caffeine cutoff raises next-morning HRV.",
@@ -50,7 +55,7 @@ async def lock_and_assign(
         experiment = await service.create_draft(session, Draft(**values))
         await service.lock_experiment(session, experiment.id, TODAY)
         experiment_id = experiment.id
-    for offset in range(planned_days):
+    for offset in range(calendar_days or planned_days):
         async with session_factory() as session, session.begin():
             await service.assign_day(session, experiment_id, START + timedelta(days=offset))
     return experiment_id

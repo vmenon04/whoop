@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whoop_lab.experiments.outcomes import OUTCOMES, default_analysis_spec
-from whoop_lab.experiments.randomize import arm_for, stratum_for
+from whoop_lab.experiments.randomize import Slot, arm_for, in_washout, next_slot, stratum_for
 from whoop_lab.models.experiments import (
     STATUS_ACTIVE,
     STATUS_COMPLETED,
@@ -210,10 +210,7 @@ async def assign_day(
     )
     if latest is not None and day <= latest:
         return None, False  # never fill in a day that was skipped
-    # Every assigned day is followed by the washout gap, whatever its arm. If the gap
-    # followed treatment days only, the calendar would depend on the arms drawn, and
-    # re-drawing arms over the observed dates would no longer mirror the design.
-    if latest is not None and day <= latest + timedelta(days=experiment.washout_days):
+    if in_washout(day, latest, experiment.washout_days):
         return None, False
 
     stratum = stratum_for(day, stratify_weekend=experiment.stratify_weekend)
@@ -225,21 +222,20 @@ async def assign_day(
             .limit(1)
         )
     ).scalar_one_or_none()
-    if last is None or last.block_position + 1 >= experiment.block_size:
-        block_index = 0 if last is None else last.block_index + 1
-        position = 0
-        seed = secrets.randbits(62)  # a fresh seed per block, stored on its rows
-    else:
-        block_index, position, seed = last.block_index, last.block_position + 1, last.seed
+    slot = next_slot(
+        None if last is None else Slot(last.block_index, last.block_position, last.seed),
+        experiment.block_size,
+        lambda: secrets.randbits(62),  # a fresh seed per block, stored on its rows
+    )
 
     assignment = Assignment(
         experiment_id=experiment_id,
         local_date=day,
-        arm=arm_for(seed, experiment.block_size, position),
+        arm=arm_for(slot.seed, experiment.block_size, slot.block_position),
         stratum=stratum,
-        block_index=block_index,
-        block_position=position,
-        seed=seed,
+        block_index=slot.block_index,
+        block_position=slot.block_position,
+        seed=slot.seed,
     )
     session.add(assignment)
     await session.flush()

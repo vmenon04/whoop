@@ -97,11 +97,16 @@ def randomization_test(y, arm, block_size=4, draws=10_000, seed=0, tau=0.0):
 
 ## Validation, required before any analysis change is committed
 
-Run `whoop-lab simulate` (or the matching pytest marker) and confirm all three:
+Run `whoop-lab simulate` (or `tests/test_simulation.py`) and confirm all five:
 
 1. **Null calibration.** With no effect and AR(1) noise (phi around 0.3 to 0.5), the rejection rate at alpha 0.05 is between 0.03 and 0.07 over at least 2,000 simulated experiments.
 2. **Effect recovery.** With a planted additive effect, the mean estimate is within 10% of it, and the 95% interval covers it in 93% to 97% of simulations.
 3. **Design match.** Changing the simulator's block size without changing the test's makes check 1 fail. This confirms the test is tied to the design.
+
+4. **Plain shuffle told apart.** On the same null experiments, a test that shuffles labels and ignores the blocks rejects at least one percentage point less often than the real test. Checks 1 and 2 alone cannot tell the two apart. This needs autocorrelated noise, so `simulate` refuses phi below 0.3.
+5. **Harder designs.** Checks 1 and 2 also hold for weekday/weekend strata, washout under a linear drift, missed evenings, and an analysis part-way through a block. In check 2 the mean estimate must also be within three simulation standard errors of the planted effect.
+
+The simulator assigns days with the assigner's own functions (`randomize.next_slot`, `in_washout`, `stratum_for`, `arm_for`), never with the test's re-draw code.
 
 If any check fails, the change is wrong, even if every unit test is green.
 

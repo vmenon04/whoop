@@ -67,6 +67,40 @@ async def test_primary_analysis_recovers_a_planted_effect(session_factory: Sessi
     assert primary.details["percent_change"] == pytest.approx((np.exp(primary.effect) - 1) * 100)
 
 
+async def test_stratified_washout_design_goes_through_the_whole_pipeline(
+    session_factory: SessionFactory,
+) -> None:
+    experiment_id = await lock_and_assign(
+        session_factory,
+        planned_days=24,
+        calendar_days=48,
+        washout_days=1,
+        stratify_weekend=True,
+    )
+    arm_by_day = await arms(session_factory, experiment_id)
+    days = sorted(arm_by_day)
+    assert [(d - START).days for d in days] == list(range(0, 48, 2))
+    outcomes = await add_outcomes(
+        session_factory, arm_by_day, effect=0.30, missing=frozenset(days[5:7])
+    )
+
+    primary = (await analyze(session_factory, experiment_id, START + timedelta(days=60)))[
+        (METHOD_PRIMARY, "ln_hrv_rmssd")
+    ]
+    # Washout days have outcomes in the database but never enter the analysis.
+    treated = [outcomes[d] for d in days if d in outcomes and arm_by_day[d] == "treatment"]
+    control = [outcomes[d] for d in days if d in outcomes and arm_by_day[d] == "control"]
+    assert primary.effect == pytest.approx(np.mean(treated) - np.mean(control), abs=1e-9)
+    assert primary.n_treatment + primary.n_control == 22
+    assert primary.n_missing_treatment + primary.n_missing_control == 2
+    assert primary.details["days_due"] == 24
+    assert primary.ci_low is not None
+    assert primary.ci_high is not None
+    assert primary.ci_low < 0.30 < primary.ci_high
+    assert primary.p_value is not None
+    assert primary.p_value < 0.001
+
+
 async def test_null_data_gives_an_interval_around_zero(session_factory: SessionFactory) -> None:
     experiment_id = await lock_and_assign(session_factory)
     await add_outcomes(session_factory, await arms(session_factory, experiment_id), effect=0.0)
