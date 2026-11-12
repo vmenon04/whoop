@@ -224,6 +224,29 @@ async def test_days_whose_morning_has_not_arrived_are_neither_analysed_nor_missi
     assert primary.n_missing_treatment + primary.n_missing_control == 0
 
 
+async def test_an_unscored_morning_is_not_missing_until_the_day_after(
+    session_factory: SessionFactory,
+) -> None:
+    experiment_id = await lock_and_assign(session_factory)
+    arm_by_day = await arms(session_factory, experiment_id)
+    today = START + timedelta(days=10)
+    yesterday = today - timedelta(days=1)
+    await add_outcomes(
+        session_factory, arm_by_day, last_day=yesterday, pending=frozenset({yesterday})
+    )
+    key = (METHOD_PRIMARY, "ln_hrv_rmssd")
+
+    # This morning's recovery is still being scored: yesterday waits, uncounted.
+    early = (await analyze(session_factory, experiment_id, today))[key]
+    assert early.details["days_due"] == 9
+    assert early.n_missing_treatment + early.n_missing_control == 0
+
+    # A day later it has had its whole morning and counts as missing.
+    late = (await analyze(session_factory, experiment_id, today + timedelta(days=1)))[key]
+    assert late.details["days_due"] == 10
+    assert late.n_missing_treatment + late.n_missing_control == 1
+
+
 async def test_nothing_is_reported_before_the_first_outcome(
     session_factory: SessionFactory,
 ) -> None:

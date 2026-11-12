@@ -59,7 +59,7 @@ The `experiment-analysis` skill is the authority; these are where its rules live
 - Tomorrow's arm is drawn by `experiments/jobs.py:assign_tomorrow`, never before `ASSIGN_HOUR`. No page or query shows anything beyond the rows that exist.
 - Each block gets a fresh seed stored on its rows; `randomize.arm_for(seed, block_size, position)` reproduces any arm.
 - `analysis/inference.py` is the vectorised randomization test. `tests/test_inference.py` holds the skill's reference implementation verbatim and checks the two agree. `BlockDesign.from_assignments` rebuilds blocks from stored `stratum`, `block_index`, `block_position`, never from dates.
-- A day is "due" once `local_date < today`. Days not yet due are neither analysed nor counted as missing.
+- A day D is "due" (`pipeline.due_mask`) once `D + 1 < today`, or on D+1 itself if its recovery is already scored. Days not yet due are neither analysed nor counted as missing.
 - Methods written to `experiment_results.method`: `itt_randomization` (primary), `ols_adjusted_hc3_secondary`, `per_protocol_biased`, `itt_randomization_exploratory`. `analysis/pipeline.py:describe` is the only wording used for results.
 - An experiment closes in `complete_if_finished`, on the calendar alone. Nothing may close one based on results.
 - Any analysis change must pass `whoop-lab simulate` (also `tests/test_simulation.py`): null rejection 0.03 to 0.07, coverage 0.93 to 0.97, a failing calibration under the wrong block design, a plain label shuffle told apart from the real test, and the same calibration for the harder designs in `simulate.SCENARIOS`. The simulator assigns days with the functions in `experiments/randomize.py` that `assign_day` uses; keep it that way.

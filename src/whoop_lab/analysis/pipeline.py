@@ -67,7 +67,8 @@ async def load_frame(session: AsyncSession, experiment: Experiment) -> pd.DataFr
         await session.execute(
             text(
                 f"SELECT a.local_date, a.arm, a.stratum, a.block_index, a.block_position, "  # noqa: S608
-                f"a.complied, o.day_strain, {_OUTCOME_COLUMNS} "
+                f"a.complied, coalesce(o.outcome_scored, false) AS outcome_scored, "
+                f"o.day_strain, {_OUTCOME_COLUMNS} "
                 "FROM assignments a LEFT JOIN daily_outcomes o USING (local_date) "
                 "WHERE a.experiment_id = :id ORDER BY a.local_date"
             ),
@@ -245,6 +246,22 @@ def _adjusted(due: pd.DataFrame, primary: ResultRow, outcome_key: str, alpha: fl
     return row
 
 
+def due_mask(frame: pd.DataFrame, today: date) -> pd.Series:
+    """Which assigned days are ready to analyse.
+
+    Day D's outcome arrives on the morning of D+1. D is due once that whole
+    morning has passed (D+1 < today), or earlier if its recovery is already
+    scored. Yesterday's day with no scored recovery yet is not due: the score
+    may still be on its way, and results are append-only, so counting it as
+    missing now would leave a wrong row behind for good. Days not due are
+    neither analysed nor counted as missing.
+    """
+    yesterday = today - timedelta(days=1)
+    settled = frame["local_date"] < yesterday
+    scored = (frame["local_date"] == yesterday) & frame["outcome_scored"].astype(bool)
+    return settled | scored
+
+
 def analyze_frame(frame: pd.DataFrame, experiment: Experiment, today: date) -> list[ResultRow]:
     """Compute every result row from an already loaded frame. Pure: no database access."""
     spec = experiment.analysis_spec
@@ -252,8 +269,7 @@ def analyze_frame(frame: pd.DataFrame, experiment: Experiment, today: date) -> l
     seed = int(spec.get("seed", 0))
     if frame.empty:
         return []
-    # A day is "due" once its outcome morning has arrived. Later days are not missing yet.
-    due = frame[frame["local_date"] < today].reset_index(drop=True)
+    due = frame[due_mask(frame, today)].reset_index(drop=True)
     if due.empty:
         return []
 
