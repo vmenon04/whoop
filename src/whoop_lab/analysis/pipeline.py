@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from itertools import pairwise
 from typing import Any
 
 import numpy as np
@@ -246,6 +247,17 @@ def _adjusted(due: pd.DataFrame, primary: ResultRow, outcome_key: str, alpha: fl
     return row
 
 
+def _days_skipped(due: pd.DataFrame, experiment: Experiment) -> int:
+    """Calendar days inside the analysed span that should have had an arm and got none
+    (an evening on which nothing was drawn). Washout days are not skipped days."""
+    dates = list(due["local_date"])
+    expected = timedelta(days=1 + experiment.washout_days)
+    skipped = sum(max(0, (later - earlier - expected).days) for earlier, later in pairwise(dates))
+    if experiment.started_on is not None:
+        skipped += max(0, (dates[0] - experiment.started_on).days)
+    return int(skipped)
+
+
 def due_mask(frame: pd.DataFrame, today: date) -> pd.Series:
     """Which assigned days are ready to analyse.
 
@@ -275,6 +287,7 @@ def analyze_frame(frame: pd.DataFrame, experiment: Experiment, today: date) -> l
 
     primary = _itt(due, experiment, primary_key, METHOD_PRIMARY, seed)
     primary.details["label"] = "primary"
+    primary.details["days_skipped"] = _days_skipped(due, experiment)
     rows = [primary, _adjusted(due, primary, primary_key, float(spec.get("alpha", 0.05)))]
 
     complied = due["complied"].map(lambda value: value is True)

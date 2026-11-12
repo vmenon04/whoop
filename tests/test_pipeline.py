@@ -247,6 +247,28 @@ async def test_an_unscored_morning_is_not_missing_until_the_day_after(
     assert late.n_missing_treatment + late.n_missing_control == 1
 
 
+async def test_skipped_evenings_are_recorded_and_washout_days_are_not(
+    session_factory: SessionFactory,
+) -> None:
+    key = (METHOD_PRIMARY, "ln_hrv_rmssd")
+    experiment_id = await lock_and_assign(
+        session_factory, planned_days=8, calendar_days=24, washout_days=2
+    )
+    await add_outcomes(session_factory, await arms(session_factory, experiment_id))
+    complete = (await analyze(session_factory, experiment_id))[key]
+    assert complete.details["days_skipped"] == 0
+
+    async with session_factory() as session, session.begin():
+        await session.execute(text("TRUNCATE assignments"))  # skips the row triggers
+    # The first evening and one later evening are missed.
+    for offset in (1, 4, 7, 11, 14):
+        async with session_factory() as session, session.begin():
+            await service.assign_day(session, experiment_id, START + timedelta(days=offset))
+    gappy = (await analyze(session_factory, experiment_id))[key]
+    assert gappy.details["days_due"] == 5
+    assert gappy.details["days_skipped"] == 2
+
+
 async def test_nothing_is_reported_before_the_first_outcome(
     session_factory: SessionFactory,
 ) -> None:
