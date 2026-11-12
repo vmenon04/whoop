@@ -56,6 +56,10 @@ plugins = ["pydantic.mypy"]
 module = ["apscheduler.*", "testcontainers.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["whoop_lab.whoop.generated"]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
