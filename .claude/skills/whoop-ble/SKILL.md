@@ -32,7 +32,7 @@ When the band contradicts this file, the band wins: update the file and say so.
 - So a normal drain by this project means WHOOP's cloud never receives those hours, and the API side of this project gets gaps.
 - Without an acknowledgement the band stops after the first burst and trim does not move. That is what `ble_spike.py peek` relies on, and it reads the range before and after to check.
 - ONE SOURCE (wearable5.0, one band, firmware 50.43.2): an acknowledgement carrying an older position, sent during a transfer after a `HISTORY_END`, moves trim back, so a drain can be undone and the app then uploads everything. The owner approved this on 2026-11-12 for one purpose: `build_trim_restore()` puts trim back to the position the band reported at the start of the same drain. It takes that `DataRange`, never a page number. Not yet run on the band.
-- Re-reading older history uses the same frame with an older page. `build_trim_rewind()` implements it (a bounded number of pages back from the write head, clamped to history the band still holds), and `ble_spike.py drain --reread-hours` always follows it with a restore. The owner has NOT explicitly approved this; it was offered and is awaiting a yes. Do not describe it as approved, and do not build anything that runs it unattended, until the owner says so. No other use of command 23 exists.
+- Re-reading older history uses the same frame with an older page. `build_trim_rewind()` implements it (a bounded number of pages back from the write head, clamped to history the band still holds), and `ble_spike.py drain --reread-hours` always follows it with a restore. The owner ran it once on 2026-11-12 by typing the confirmation. That is consent for that run, not standing approval: do not build anything that rewinds unattended until the owner says so. No other use of command 23 exists.
 - BAND (2026-11-12): pairing the Mac removed the phone's bond; the WHOOP app had to be re-paired afterwards. Swapping between the app and this project costs a re-pair each way.
 
 ## GATT (BAND, 2026-11-12)
@@ -66,6 +66,11 @@ A neighbouring service `11500001-6215-11ee-8c99-0242ac120002` belongs to the bat
 - Those 30 daytime records carried no R-R intervals at all (`rr_count` 0). Sources report 92% of beats overnight. Daytime R-R may simply be absent; unknown until a night is drained.
 - Write rate: 200 pages an hour measured over 3 minutes, 250 an hour from trim clock to newest clock. That is 20 to 25 MB a day and 22 to 27 days of ring.
 - The console log on the band says "No active optical data collection sources" and "No active IMU data collection sources", and shows the WHOOP app writing feature flags on each connect. Raw optical and IMU records are not being stored by default.
+
+- **Re-read and restore work on this band** (BAND, 2026-11-12, run by the owner): trim was moved back about 4,100 pages, 1,095 chunks covering 16.4 hours (8.1 MB over the air) arrived in 264 seconds with no bytes lost and no gaps in the record index, and the restore put trim back on its original page, confirmed by a range read. About 220 times real time.
+- **Overnight R-R is nearly complete; daytime R-R is not.** While the band reports SLEEP, over 90% of expected beats carry an R-R interval. While awake about a fifth do, and almost none in active hours. HRV from this band is a sleep-time measure.
+- The vendored experimental helpers (sleep period from band state, RMSSD, respiratory rate from R-R, SpO2 windows from byte 82, skin temperature) all produced plausible values for one night, close to WHOOP's API values except HRV, where WHOOP's figure is not a whole-night RMSSD and its definition has to be matched, not assumed. One night proves nothing about agreement. The numbers themselves are biometric data and are not recorded in this repository.
+- Records seen in 16 hours: layout 18 (one per second, 124 bytes), layout 26 compact optical (88 bytes, in bursts roughly every 20 minutes), events, console logs. No layout 20 or 21.
 
 ## Frame (SOURCES AGREE)
 
