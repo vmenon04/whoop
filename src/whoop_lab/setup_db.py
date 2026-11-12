@@ -30,9 +30,23 @@ GRAFANA_READABLE = (
     "daily_tags",
     "daily_outcomes",
     "experiments",
-    "assignments",
     "experiment_results",
 )
+# Tables Grafana may read only in part.
+GRAFANA_READABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    # No `seed`, `block_index` or `block_position`: with a block's seed anyone can
+    # compute the arms of its days that have not been assigned yet.
+    "assignments": (
+        "id",
+        "experiment_id",
+        "local_date",
+        "arm",
+        "stratum",
+        "complied",
+        "note",
+        "created_at",
+    ),
+}
 # webhook_events without `payload`.
 GRAFANA_EVENT_COLUMNS = (
     "id",
@@ -111,8 +125,11 @@ async def ensure_grafana_role(session_factory: SessionFactory, password: str) ->
         for name in GRAFANA_READABLE:
             if name in present:
                 await conn.exec_driver_sql(f"GRANT SELECT ON {name} TO {GRAFANA_ROLE}")
-        columns = ", ".join(GRAFANA_EVENT_COLUMNS)
-        await conn.exec_driver_sql(f"GRANT SELECT ({columns}) ON webhook_events TO {GRAFANA_ROLE}")
+        partial = {**GRAFANA_READABLE_COLUMNS, "webhook_events": GRAFANA_EVENT_COLUMNS}
+        for name, names in partial.items():
+            if name in present:
+                columns = ", ".join(names)
+                await conn.exec_driver_sql(f"GRANT SELECT ({columns}) ON {name} TO {GRAFANA_ROLE}")
     log.info("setup: role %s is ready", GRAFANA_ROLE)
 
 

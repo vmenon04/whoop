@@ -47,6 +47,8 @@ async def test_grafana_role_reads_analysis_data_but_not_secrets(
                 "SELECT count(*) FROM sync_runs",
                 "SELECT count(*) FROM webhook_events WHERE status = 'pending'",
                 "SELECT local_timezone FROM app_config",
+                "SELECT local_date, arm, complied, note FROM assignments",
+                "SELECT count(*) FROM experiment_results",
             ):
                 await conn.execute(text(readable))
         for forbidden in (
@@ -54,6 +56,10 @@ async def test_grafana_role_reads_analysis_data_but_not_secrets(
             "SELECT access_token FROM oauth_token",
             "SELECT payload FROM webhook_events",
             "SELECT * FROM webhook_events",
+            # A block's seed reveals the arms of its days not yet assigned.
+            "SELECT seed FROM assignments",
+            "SELECT block_index, block_position FROM assignments",
+            "SELECT * FROM assignments",
             "INSERT INTO daily_tags (local_date, key, value) VALUES ('2026-01-01', 'a', 'b')",
             "DELETE FROM cycles",
             "UPDATE app_config SET local_timezone = 'UTC'",
@@ -61,6 +67,22 @@ async def test_grafana_role_reads_analysis_data_but_not_secrets(
             async with engine.connect() as conn:
                 with pytest.raises(DBAPIError, match="permission denied"):
                     await conn.execute(text(forbidden))
+    finally:
+        await engine.dispose()
+
+
+async def test_setup_withdraws_an_earlier_grant_on_the_whole_assignments_table(
+    session_factory: SessionFactory, database_url: str
+) -> None:
+    await ensure_grafana_role(session_factory, PASSWORD)
+    async with session_factory() as session, session.begin():
+        await session.execute(text("GRANT SELECT ON assignments TO grafana_ro"))  # as deployed
+    await ensure_grafana_role(session_factory, PASSWORD)
+    engine = grafana_engine(database_url)
+    try:
+        async with engine.connect() as conn:
+            with pytest.raises(DBAPIError, match="permission denied"):
+                await conn.execute(text("SELECT seed FROM assignments"))
     finally:
         await engine.dispose()
 
