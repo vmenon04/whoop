@@ -9,7 +9,9 @@ from collections.abc import AsyncIterator, Iterator
 # (which cannot mount the Docker socket on Docker Desktop for macOS) is not needed.
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
+import httpx
 import pytest
+import respx
 from alembic import command
 from alembic.config import Config
 from pydantic import SecretStr
@@ -18,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
+from tests.fakes import FakeTokenServer
 from whoop_lab.config import Settings
 from whoop_lab.db import SessionFactory, make_session_factory
 from whoop_lab.models import Base
@@ -58,3 +61,23 @@ def settings(database_url: str) -> Settings:
         public_base_url="https://whoop.test",
         event_backoff_base_seconds=1,
     )
+
+
+@pytest.fixture
+def whoop_mock() -> Iterator[respx.MockRouter]:
+    """Every outbound httpx call is intercepted. Unmocked requests fail the test."""
+    with respx.mock(assert_all_called=False, assert_all_mocked=True) as router:
+        yield router
+
+
+@pytest.fixture
+def token_server(whoop_mock: respx.MockRouter, settings: Settings) -> FakeTokenServer:
+    server = FakeTokenServer()
+    whoop_mock.post(settings.whoop_token_url).mock(side_effect=server)
+    return server
+
+
+@pytest.fixture
+async def http() -> AsyncIterator[httpx.AsyncClient]:
+    async with httpx.AsyncClient() as client:
+        yield client

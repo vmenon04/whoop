@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}whoop-lab{% endblock %}</title>
+  <style>
+    :root { color-scheme: light dark; --fg:#1b1b1f; --bg:#fafafa; --muted:#6b6b76; --ok:#1a7f37; --bad:#b42318; --line:#d9d9e0; }
+    @media (prefers-color-scheme: dark) { :root { --fg:#ececf1; --bg:#131316; --muted:#9a9aa6; --ok:#4ac26b; --bad:#f97066; --line:#2c2c33; } }
+    body { margin:0; padding:16px; font:17px/1.45 system-ui, sans-serif; color:var(--fg); background:var(--bg); }
+    main { max-width:34rem; margin:0 auto; }
+    h1 { font-size:1.3rem; margin:.2rem 0 1rem; }
+    a.button, button { display:inline-block; padding:.75rem 1.1rem; border:1px solid var(--line); border-radius:.6rem; font:inherit; color:inherit; background:transparent; text-decoration:none; }
+    dl { display:grid; grid-template-columns:auto 1fr; gap:.35rem 1rem; margin:1rem 0; }
+    dt { color:var(--muted); } dd { margin:0; overflow-wrap:anywhere; }
+    .ok { color:var(--ok); } .bad { color:var(--bad); } .muted { color:var(--muted); }
+  </style>
+</head>
+<body>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>
