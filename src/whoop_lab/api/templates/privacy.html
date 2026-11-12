@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Privacy · whoop-lab{% endblock %}
+{% block content %}
+<h1>Privacy policy</h1>
+<p class="muted">Last updated November 11, 2026</p>
+
+<p>whoop-lab is a personal, self-hosted tool. It has one user: its owner, who is also the only
+person whose WHOOP account is connected to it. It is not offered to the public and nobody else
+can sign in.</p>
+
+<h2>What it collects</h2>
+<p>With the owner's authorization, whoop-lab reads the owner's own data from the WHOOP API:
+recovery, sleep, physiological cycle and workout records, the WHOOP user ID, and body
+measurements. It also stores notes the owner enters about their own days.</p>
+
+<h2>How it is used</h2>
+<p>The data is used only to keep a personal archive and to run the owner's own
+self-experiments on sleep and recovery. It is not used for advertising or profiling.</p>
+
+<h2>Where it is stored</h2>
+<p>Everything is stored in a database on a server the owner controls. Access to the site is
+restricted to the owner. The connection to WHOOP uses OAuth tokens that are kept on that server
+and never shared.</p>
+
+<h2>Sharing</h2>
+<p>The data is not sold, shared with, or disclosed to any third party.</p>
+
+<h2>Retention and deletion</h2>
+<p>Data is kept until the owner deletes it. The owner can delete the database at any time and
+can revoke this application's access from the WHOOP app, which stops all further collection.</p>
+
+<h2>Visitors</h2>
+<p>This page sets no cookies and collects nothing about people who read it. The site is served
+through Cloudflare, which processes requests under its own privacy policy.</p>
+{% endblock %}

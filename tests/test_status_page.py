@@ -39,3 +39,10 @@ async def test_status_page_prompts_for_reauth(
     await seed_token(session_factory, status="reauth_required")
     response = await api.get("/")
     assert "Reconnect WHOOP" in response.text
+
+
+async def test_privacy_page_is_static(api: httpx.AsyncClient) -> None:
+    response = await api.get("/privacy")
+    assert response.status_code == 200
+    assert "Privacy policy" in response.text
+    assert "set-cookie" not in response.headers

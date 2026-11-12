@@ -58,8 +58,9 @@ In Zero Trust, under Access, create two self-hosted applications:
 | --- | --- | --- |
 | whoop-lab | `whoop.vasumenon.com` | Action **Allow**, Include **Emails**: your address |
 | whoop-lab webhook | `whoop.vasumenon.com/webhooks/whoop` | Action **Bypass**, Include **Everyone** |
+| whoop-lab privacy | `whoop.vasumenon.com/privacy` | Action **Bypass**, Include **Everyone** |
 
-Access applies the most specific path, so the bypass covers only the webhook. That path is protected by the HMAC signature check instead. Everything else, including `/oauth/*`, `/healthz` and `/grafana`, asks for login.
+Access applies the most specific path, so the bypasses cover only those two paths. The webhook is protected by the HMAC signature check instead. `/privacy` is a static page with no data behind it; WHOOP's app registration asks for a public privacy policy URL. Everything else, including `/oauth/*`, `/healthz` and `/grafana`, asks for login.
 
 Check it:
 
@@ -72,7 +73,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST https://whoop.vasumenon.com/web
 
 1. Sign in at <https://developer-dashboard.whoop.com> and create an app.
 2. Scopes: `read:recovery`, `read:cycles`, `read:sleep`, `read:workout`, `read:profile`, `read:body_measurement`. (`offline` is requested by the app at sign-in.)
-3. Redirect URL: `https://whoop.vasumenon.com/oauth/callback` (must match exactly).
+3. Redirect URL: `https://whoop.vasumenon.com/oauth/callback` (must match exactly). Privacy policy URL: `https://whoop.vasumenon.com/privacy`.
 4. Webhook URL: `https://whoop.vasumenon.com/webhooks/whoop`, model version **v2**.
 5. Copy the client ID and client secret into `.env` as `WHOOP_CLIENT_ID` and `WHOOP_CLIENT_SECRET`.
 

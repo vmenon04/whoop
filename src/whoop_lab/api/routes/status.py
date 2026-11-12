@@ -59,3 +59,9 @@ async def status(request: Request) -> Response:
             "tz": tz,
         },
     )
+
+
+@router.get("/privacy", response_class=HTMLResponse)
+async def privacy(request: Request) -> Response:
+    """Static page. WHOOP's app registration asks for a privacy policy URL."""
+    return templates.TemplateResponse(request, "privacy.html", {})

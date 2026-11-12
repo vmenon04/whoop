@@ -31,7 +31,7 @@ Run ruff, mypy and pytest before every commit. Small commits, one concern each, 
 8. All WHOOP data calls go through `WhoopClient`, which handles `X-RateLimit-*` and 429.
 9. Timestamps are UTC (`timestamptz`) with WHOOP's `timezone_offset` kept. An experiment day is a local calendar date (`LOCAL_TIMEZONE`). The day-to-outcome mapping will live only in the `daily_outcomes` view.
 10. Config comes from env vars through `Settings`. Never commit secrets. Never log tokens, the client secret or an Authorization header.
-11. Cloudflare Access protects every path except `/webhooks/whoop`. No login system in the app.
+11. Cloudflare Access protects every path except `/webhooks/whoop` and the static `/privacy` page (WHOOP's app registration needs a public privacy URL). No login system in the app. Nothing public may read the database.
 
 ## Conventions
 
