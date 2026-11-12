@@ -69,6 +69,9 @@ asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 
 [dependency-groups]
+ble = [
+    "bleak>=1.0",
+]
 dev = [
     "datamodel-code-generator>=0.94.0",
     "mypy>=2.4.1",
