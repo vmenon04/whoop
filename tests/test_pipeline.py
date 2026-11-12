@@ -101,13 +101,22 @@ async def test_stratified_washout_design_goes_through_the_whole_pipeline(
     assert primary.p_value < 0.001
 
 
-async def test_null_data_gives_an_interval_around_zero(session_factory: SessionFactory) -> None:
+async def test_null_data_gives_an_interval_that_agrees_with_its_p_value(
+    session_factory: SessionFactory,
+) -> None:
+    """With no effect the interval holds zero about 95% of the time, not always (the
+    block seeds are random), so this checks what must hold every time instead: zero
+    lies inside the interval exactly when the test does not reject it."""
     experiment_id = await lock_and_assign(session_factory)
     await add_outcomes(session_factory, await arms(session_factory, experiment_id), effect=0.0)
     primary = (await analyze(session_factory, experiment_id))[(METHOD_PRIMARY, "ln_hrv_rmssd")]
+    assert primary.effect is not None
+    assert primary.p_value is not None
     assert primary.ci_low is not None
     assert primary.ci_high is not None
-    assert primary.ci_low < 0 < primary.ci_high
+    assert primary.ci_low < primary.effect < primary.ci_high
+    assert abs(primary.effect) < 0.1  # nowhere near a real effect at sigma 0.05
+    assert (primary.p_value > 0.05) == (primary.ci_low <= 0 <= primary.ci_high)
 
 
 async def test_every_method_is_reported_and_labelled(session_factory: SessionFactory) -> None:
