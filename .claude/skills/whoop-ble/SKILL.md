@@ -56,6 +56,15 @@ A neighbouring service `11500001-6215-11ee-8c99-0242ac120002` belongs to the bat
 - R-R intervals on `0x2A37` are patchy. In a 120-second capture while awake, 27 of 120 notifications carried one (31 intervals, where about 140 beats occurred), in two runs. The unpaired stream alone is not enough for HRV; whether it is complete during sleep is untested.
 - Subscribing to the `fd4b` channels without a bond makes the band drop the connection (bleak reports `disconnected`), and the next connection attempt can fail during service discovery. The band has to be in pairing mode: tap it until it flashes blue.
 
+- Pairing works from macOS once the band is in pairing mode, and the bond persists: a second connection minutes later needed no pairing mode.
+- `GET_HELLO` and `GET_DATA_RANGE` both answer twice: a PENDING reply (for hello, 107 zero bytes), then SUCCESS. Take the reply whose result is not PENDING. The hello body gives battery in tenths at 1, clock at 6, the serial as ASCII at 14 and firmware at 91 to 97, matching Device Information.
+- `GET_DATA_RANGE` body is 67 bytes (65 plus padding); pages and the 131,072-page ring parse as documented. `GET_BATTERY_LEVEL` body starts with the percentage as one byte.
+- A history request without acknowledgement returned `HISTORY_START`, 30 layout-18 records of 124 bytes (one per second, contiguous record indexes, starting exactly at the trim clock), events, 55 console frames, then `HISTORY_END`, all in about one second. Trim stayed where it was; only the read page advanced, by two pages. So one chunk is about two pages, or 30 seconds.
+- Layout 18 decodes sensibly at the documented offsets: heart rate at 22, skin temperature at 73 (hundredths of a degree), gravity vector of length 1.0 at 45.
+- Those 30 daytime records carried no R-R intervals at all (`rr_count` 0). Sources report 92% of beats overnight. Daytime R-R may simply be absent; unknown until a night is drained.
+- Write rate: 200 pages an hour measured over 3 minutes, 250 an hour from trim clock to newest clock. That is 20 to 25 MB a day and 22 to 27 days of ring.
+- The console log on the band says "No active optical data collection sources" and "No active IMU data collection sources", and shows the WHOOP app writing feature flags on each connect. Raw optical and IMU records are not being stored by default.
+
 ## Frame (SOURCES AGREE)
 
 `AA 01`, u16 length (frame length minus 8), destination, source, CRC16-Modbus of the first 6 bytes, body padded to a multiple of 4, CRC32 of the body. Implemented in `ble/framing.py`. The first write of a session is the fixed hello `aa0108000001e67123019101363e5c8d`, and `build_allowed(GET_HELLO, 1)` must reproduce it exactly.

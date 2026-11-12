@@ -48,6 +48,7 @@ from whoop_lab.ble.commands import (
     META_HISTORY_COMPLETE,
     META_HISTORY_END,
     META_NAMES,
+    RESULT_PENDING,
     Command,
     CommandResponse,
     DataRange,
@@ -180,7 +181,9 @@ class Session:
         deadline = time.monotonic() + wait_seconds
         while time.monotonic() < deadline:
             for response in self.responses[seen:]:
-                if response.command == command and len(response.body) >= min_body:
+                # Several commands answer twice: PENDING first, then the real reply.
+                final = response.result != RESULT_PENDING
+                if response.command == command and final and len(response.body) >= min_body:
                     return response
             await asyncio.sleep(0.05)
         return None
