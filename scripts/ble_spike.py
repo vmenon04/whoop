@@ -26,6 +26,9 @@ else happens to it. That directory is git-ignored: it holds biometric data.
     drain   read ALL stored history, acknowledging each chunk once it is on disk.
             This CONSUMES it: the band's sync position moves, and the WHOOP app will
             never receive or score those hours. It asks before starting.
+            With --restore the position is put back afterwards and checked, so the
+            WHOOP app uploads the same history when it next syncs.
+    restore put the position back for an earlier drain that could not (lost connection).
 
 Only the commands in whoop_lab.ble.commands.ALLOWED can be sent, plus the history
 acknowledgement, which can only echo the token the band itself just sent.
@@ -35,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import json
 import sys
 import time
@@ -60,6 +64,7 @@ from whoop_lab.ble.commands import (
     DataRange,
     build_allowed,
     build_history_ack,
+    build_trim_restore,
     metadata_type,
     parse_data_range,
     parse_hello,
@@ -151,6 +156,7 @@ class Session:
         self.responses: list[CommandResponse] = []
         self.metadata: list[int] = []
         self.end_frames: list[bytes] = []
+        self.chunk_ended = asyncio.Event()
         self.frames = 0
 
     def on_notification(self, characteristic: Any, data: bytearray) -> None:
@@ -170,6 +176,7 @@ class Session:
                 self.metadata.append(meta)
                 if meta == META_HISTORY_END:
                     self.end_frames.append(frame)
+                    self.chunk_ended.set()
 
     async def subscribe(self) -> None:
         for uuid in NOTIFY_CHARACTERISTICS:
@@ -188,6 +195,33 @@ class Session:
         frame = build_history_ack(history_end_frame, self.sequence)
         self.writer.write("tx", COMMAND_CHARACTERISTIC, frame)
         await self.client.write_gatt_char(COMMAND_CHARACTERISTIC, frame, response=True)
+
+    async def restore_trim(self, original: DataRange) -> bool:
+        """Put trim back to `original` and check it. The band only accepts this during
+        a transfer, after a HISTORY_END, so one is started first."""
+        for attempt in range(1, 5):
+            self.chunk_ended.clear()
+            await self.send(Command.SEND_HISTORICAL_DATA)
+            try:
+                await asyncio.wait_for(self.chunk_ended.wait(), timeout=20)
+            except TimeoutError:
+                # Nothing unsynced to serve yet. The band writes a page every 15 s or so.
+                await self.send(Command.ABORT_HISTORICAL_TRANSMITS)
+                say(f"  restore attempt {attempt}: no chunk to ride on yet, waiting 20 s")
+                await asyncio.sleep(20)
+                continue
+            self.sequence = (self.sequence + 1) & 0xFF
+            frame = build_trim_restore(original, self.sequence)
+            self.writer.write("tx", COMMAND_CHARACTERISTIC, frame)
+            await self.client.write_gatt_char(COMMAND_CHARACTERISTIC, frame, response=True)
+            await asyncio.sleep(1)
+            await self.send(Command.ABORT_HISTORICAL_TRANSMITS)
+            await asyncio.sleep(1.5)
+            after = await self.data_range("after restore")
+            if after is not None and after.trim_page == original.trim_page:
+                return True
+            say(f"  restore attempt {attempt}: trim is not back yet")
+        return False
 
     async def ask(
         self, command: Command, *, wait_seconds: float = 8.0, min_body: int = 0
@@ -478,11 +512,55 @@ async def run_stage(stage: Any, args: argparse.Namespace) -> int:
     return result
 
 
+RESTORE_OK = """\
+Trim is back at page {page}. Now turn the phone's Bluetooth on, re-pair the band in
+the WHOOP app, and let it sync: it will upload this same history to WHOOP."""
+
+RESTORE_FAILED = """\
+WARNING: the band's sync position could NOT be put back to page {page}.
+The capture is safe on disk, but WHOOP will not receive this history unless a later
+restore works. Do not open the WHOOP app yet. Try:
+    uv run --group ble python scripts/ble_spike.py restore {directory}
+and tell me what it prints."""
+
+RANGE_FILE = "range_before.json"
+
+
+async def finish_restore(session: Session, original: DataRange, directory: Path) -> None:
+    say("Putting the band's sync position back ...")
+    if await session.restore_trim(original):
+        say(RESTORE_OK.format(page=original.trim_page))
+    else:
+        say(RESTORE_FAILED.format(page=original.trim_page, directory=directory))
+
+
+async def stage_restore(args: argparse.Namespace) -> int:
+    source = Path(args.directory) / RANGE_FILE
+    original = DataRange(**json.loads(source.read_text(encoding="utf-8")))
+    opened = await open_session(args, "restore")
+    if opened is None:
+        return 3
+    client, session, directory = opened
+    try:
+        await session.hello()
+        now = await session.data_range("now")
+        if now is not None and now.trim_page == original.trim_page:
+            say("Trim is already at the recorded page. Nothing to do.")
+        else:
+            await finish_restore(session, original, Path(args.directory))
+    finally:
+        if client.is_connected:
+            await client.disconnect()
+        session.writer.close()
+    return finish(directory)
+
+
 DRAIN_WARNING = """\
 This reads all history the band has not yet synced and acknowledges it.
 Acknowledged history is removed from the band's queue: the WHOOP app will never
 receive it, so WHOOP will show no data, scores or API records for those hours.
 Each chunk is written to disk before it is acknowledged.
+With --restore the position is put back afterwards, so the app still gets it all.
 Type 'drain' to go ahead: """
 
 
@@ -503,6 +581,7 @@ async def stage_drain(args: argparse.Namespace) -> int:
         if before is None:
             say("No history range, so not draining.")
             return 4
+        write_json(directory / RANGE_FILE, dataclasses.asdict(before))
         started = time.monotonic()
         await session.send(Command.SEND_HISTORICAL_DATA)
         chunks = handled = 0
@@ -544,6 +623,12 @@ async def stage_drain(args: argparse.Namespace) -> int:
                 say(
                     f"Trim moved forward {moved} pages, {moved * 4096 / 1e6:.1f} MB of band storage"
                 )
+            if args.restore:
+                await finish_restore(session, before, directory)
+            else:
+                say("No --restore: WHOOP will not receive this history.")
+        elif args.restore:
+            say(RESTORE_FAILED.format(page=before.trim_page, directory=directory))
     finally:
         if client.is_connected:
             await client.disconnect()
@@ -586,7 +671,14 @@ def main() -> int:
     drain.add_argument("--max-chunks", type=int, default=0, help="stop after this many (0: all)")
     drain.add_argument("--idle-timeout", type=float, default=30.0)
     drain.add_argument("--yes", action="store_true", help="skip the confirmation")
-    for stage in (status, peek, drain):
+    drain.add_argument(
+        "--restore",
+        action="store_true",
+        help="afterwards put the sync position back so the WHOOP app still gets everything",
+    )
+    restore = add("restore", "put the sync position back for an earlier drain")
+    restore.add_argument("directory", help="the drain's capture directory")
+    for stage in (status, peek, drain, restore):
         stage.add_argument("--pair-timeout", type=float, default=90.0)
         stage.add_argument("--attempts", type=int, default=3)
         stage.add_argument("--no-prompt", action="store_true", help="do not wait for Enter")
@@ -602,6 +694,7 @@ def main() -> int:
         "status": stage_status,
         "peek": stage_peek,
         "drain": stage_drain,
+        "restore": stage_restore,
     }
     try:
         import bleak  # noqa: F401

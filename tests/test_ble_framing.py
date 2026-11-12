@@ -23,8 +23,10 @@ from whoop_lab.ble.commands import (
     OPT_IN_LATER,
     Command,
     CommandNotAllowedError,
+    DataRange,
     build_allowed,
     build_history_ack,
+    build_trim_restore,
     metadata_type,
     parse_data_range,
     parse_hello,
@@ -185,6 +187,32 @@ def test_acknowledgement_echoes_the_token_of_a_real_history_end_frame() -> None:
 def test_acknowledgement_is_refused_without_a_valid_history_end_frame(frame: bytes) -> None:
     with pytest.raises(CommandNotAllowedError):
         build_history_ack(frame, sequence=1)
+
+
+def test_restore_names_the_trim_page_and_wrap_the_band_reported() -> None:
+    original = DataRange(5145, 5229, 5143, 0, 131072, 1_790_000_000, 1_790_001_000)
+    frame = build_trim_restore(original, sequence=4)
+    check_frame(frame)
+    assert frame[8:12] == bytes([35, 4, 23, 1])
+    assert struct.unpack_from("<II", frame, 12) == (5143, 0)
+    # After the ring has wrapped, a trim page above the write head is one pass older.
+    wrapped = DataRange(0, 100, 130000, 7, 131072, 0, 0)
+    assert struct.unpack_from("<II", build_trim_restore(wrapped, 1), 12) == (130000, 6)
+    behind = DataRange(0, 9000, 8000, 7, 131072, 0, 0)
+    assert struct.unpack_from("<II", build_trim_restore(behind, 1), 12) == (8000, 7)
+
+
+@pytest.mark.parametrize(
+    "unusable",
+    [
+        DataRange(0, 100, 50, 0, 0, 0, 0),  # no ring size
+        DataRange(0, 100, 200000, 3, 131072, 0, 0),  # page outside the ring
+        DataRange(0, 100, 500, 0, 131072, 0, 0),  # above the write head on the first pass
+    ],
+)
+def test_restore_refuses_a_range_it_cannot_trust(unusable: DataRange) -> None:
+    with pytest.raises(CommandNotAllowedError):
+        build_trim_restore(unusable, sequence=1)
 
 
 def test_no_list_overlaps_another() -> None:

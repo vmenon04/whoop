@@ -206,6 +206,29 @@ class DataRange:
         return (self.write_page - self.trim_page) % self.total_pages
 
 
+def build_trim_restore(original: DataRange, sequence: int) -> bytes:
+    """Put the band's trim position back where `original` says it was.
+
+    Used after a drain so the WHOOP app still receives everything: the band serves
+    history from trim, and the app syncs on from wherever trim is. This is command 23
+    with a position instead of a fresh token. It only takes effect during a transfer,
+    after a HISTORY_END (LeonardSEO/wearable5.0, FINDINGS 17, firmware 50.43.2.0).
+
+    Approved by the band's owner on 2026-11-12 for restoring the position read at the
+    start of the same drain. It takes the DataRange the band reported, not a page
+    number, so it cannot be pointed anywhere else.
+    """
+    page, total = original.trim_page, original.total_pages
+    # A trim page above the write head was written on the previous pass of the ring.
+    wrap = original.write_wrap if page <= original.write_page else original.write_wrap - 1
+    if not total or page >= total or wrap < 0:
+        raise CommandNotAllowedError("the recorded history range is not usable for a restore")
+    return build_frame(
+        bytes([PACKET_COMMAND, sequence & 0xFF, HISTORICAL_DATA_RESULT, 0x01])
+        + struct.pack("<II", page, wrap)
+    )
+
+
 def parse_data_range(body: bytes) -> DataRange | None:
     """The final (SUCCESS) GET_DATA_RANGE body. None if it is the short PENDING reply."""
     if len(body) < 65:
