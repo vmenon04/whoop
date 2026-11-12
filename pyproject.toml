@@ -45,7 +45,7 @@ ignore = ["S101", "S105"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S106"]
 "alembic/**" = ["S608"]
-"scripts/gen_dashboards.py" = ["E501"]
+"scripts/gen_dashboards.py" = ["E501", "S608"]
 "src/whoop_lab/setup_db.py" = ["S608"]
 
 [tool.mypy]

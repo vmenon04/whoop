@@ -1,0 +1,421 @@
+{
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "experiment",
+        "label": "Experiment",
+        "datasource": {
+          "type": "postgres",
+          "uid": "whoop-pg"
+        },
+        "query": "SELECT name AS __text, id::text AS __value FROM experiments WHERE locked_at IS NOT NULL ORDER BY id DESC",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "uid": "whoop-experiment-results",
+  "title": "Experiment results",
+  "tags": [
+    "whoop-lab"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": false,
+  "refresh": "5m",
+  "time": {
+    "from": "now-60d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Primary estimate",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT effect FROM experiment_results WHERE experiment_id::text = '${experiment}' AND computed_at = (SELECT max(computed_at) FROM experiment_results WHERE experiment_id::text = '${experiment}') AND method = 'itt_randomization'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 1,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "p-value (randomization test)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT p_value FROM experiment_results WHERE experiment_id::text = '${experiment}' AND computed_at = (SELECT max(computed_at) FROM experiment_results WHERE experiment_id::text = '${experiment}') AND method = 'itt_randomization'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 3,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Days analysed (treatment + control)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT n_treatment + n_control FROM experiment_results WHERE experiment_id::text = '${experiment}' AND computed_at = (SELECT max(computed_at) FROM experiment_results WHERE experiment_id::text = '${experiment}') AND method = 'itt_randomization'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Mornings missing",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT n_missing_treatment + n_missing_control FROM experiment_results WHERE experiment_id::text = '${experiment}' AND computed_at = (SELECT max(computed_at) FROM experiment_results WHERE experiment_id::text = '${experiment}') AND method = 'itt_randomization'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              },
+              {
+                "value": 6,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Running primary estimate with 95% interval (the end date is fixed; this is not a stopping rule)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT computed_at AS time, effect AS estimate, ci_low AS \"interval low\", ci_high AS \"interval high\" FROM experiment_results WHERE experiment_id::text = '${experiment}' AND method = 'itt_randomization' ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Next-morning HRV by assigned arm (ms)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (a.local_date + 1)::timestamp AS time, a.arm AS metric, o.hrv_rmssd_milli AS hrv FROM assignments a JOIN daily_outcomes o USING (local_date) WHERE a.experiment_id::text = '${experiment}' AND o.outcome_scored ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      }
+    },
+    {
+      "type": "table",
+      "title": "Assignments and compliance",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT local_date, arm, complied, note FROM assignments WHERE experiment_id::text = '${experiment}' ORDER BY local_date DESC",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm"
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      }
+    },
+    {
+      "type": "table",
+      "title": "Latest results, every method (only the first row is the primary analysis)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT outcome_metric, method, effect, ci_low, ci_high, p_value, n_treatment, n_control, n_missing_treatment + n_missing_control AS missing, compromised FROM experiment_results WHERE experiment_id::text = '${experiment}' AND computed_at = (SELECT max(computed_at) FROM experiment_results WHERE experiment_id::text = '${experiment}') ORDER BY id",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm"
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      }
+    }
+  ]
+}

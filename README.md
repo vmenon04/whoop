@@ -1,18 +1,16 @@
 # whoop-lab
 
-A self-hosted service that keeps a complete copy of your WHOOP data in Postgres and (soon) runs randomized n-of-1 experiments on it. One user, four containers, one Cloudflare Tunnel hostname.
-
-**Status:** the archive half works: OAuth, scheduled token refresh, webhooks, backfill and reconciliation. Grafana dashboards, daily tags, experiments and analysis are not built yet.
+A self-hosted service that keeps a complete copy of your WHOOP data in Postgres and runs randomized n-of-1 experiments on it. One user, four containers, one Cloudflare Tunnel hostname.
 
 ## How it fits together
 
 | Service | What it does |
 | --- | --- |
-| `api` | Status page, OAuth start/callback, webhook receiver, `/healthz`. Never calls WHOOP except for the one-time code exchange. |
-| `worker` | Refreshes the token, processes webhook events, polls cycles and reconciles the last 7 days every 3 hours. |
+| `api` | `/today`, `/experiments`, status page, OAuth start/callback, webhook receiver, `/healthz`. Never calls WHOOP except for the one-time code exchange. |
+| `worker` | Refreshes the token, processes webhook events, polls cycles and reconciles the last 7 days every 3 hours. Draws tomorrow's arm each evening, alerts on a missing morning recovery at noon, and appends results at 13:00. |
 | `db` | Postgres 16. All state, and the job queue. |
-| `migrate` | Runs `alembic upgrade head` once on every `up`, then exits. |
-| `grafana` | Starts empty for now, served under `/grafana`. |
+| `migrate` | Runs `alembic upgrade head` and `whoop-lab setup-db` (timezone, Grafana's read-only role) on every `up`, then exits. |
+| `grafana` | Two dashboards provisioned from `grafana/`: data health and experiment results. Served under `/grafana`, read-only database role, viewable without a second login. |
 
 `api` and `grafana` are published on `127.0.0.1` only (ports 8000 and 3001 by default; `API_PORT` and `GRAFANA_PORT` in `.env` change them). The tunnel is the only way in.
 
@@ -22,7 +20,7 @@ Requirements on the server: Docker with Compose, and a Cloudflare Tunnel.
 
 ```sh
 git clone https://github.com/vmenon04/whoop-lab.git && cd whoop-lab
-cp .env.example .env        # then edit: passwords now, WHOOP credentials after step 2
+cp .env.example .env        # then edit: the three passwords now, WHOOP credentials after step 3
 chmod 600 .env
 ```
 
@@ -92,12 +90,40 @@ docker compose exec worker whoop-lab backfill
 
 The status page shows row counts, the last webhook and recent syncs.
 
+## Running an experiment
+
+1. **Baseline first.** Collect three to four weeks of data with nothing running. Then size the experiment from your own variability:
+   ```sh
+   docker compose exec worker whoop-lab power --days 28
+   ```
+   It prints the smallest effect a design of that length can reliably detect.
+2. **Draft.** On `/experiments`, write the hypothesis, what a treatment day and a control day mean, the primary outcome and the number of assigned days.
+3. **Lock.** Locking freezes the whole plan, including the analysis and its random seed. The first assigned day is the next day.
+4. **Run.** Each evening after 20:00 (`ASSIGN_HOUR`) the worker draws tomorrow's arm and sends it through ntfy. `/today` shows today's arm, asks whether you followed yesterday's, and has the tag buttons.
+5. **Read.** Results are appended every day at 13:00 and shown on the experiment's page and in Grafana. The experiment ends when its planned days are used up, whatever the numbers show.
+
+How it is analysed:
+
+- **Outcome mapping:** the outcome for day D is the recovery from the main sleep ending on the morning of D+1, in `LOCAL_TIMEZONE`. Naps, unscored and deleted records never count. This is defined once, in the `daily_outcomes` view.
+- **Primary result:** intention to treat. Days are compared by the arm they were assigned, whether or not you complied. The p-value and the 95% interval come from re-drawing the block randomization 10,000 times.
+- **Secondary results, labelled as such:** a covariate-adjusted model, a per-protocol estimate (biased, because compliance is not randomized), and the other outcomes (exploratory).
+- **Missing mornings** are dropped and counted. More than 20% missing, or a gap of more than 3 between arms, marks the result as compromised.
+
+`LOCAL_TIMEZONE` cannot change while an experiment is running; the stack refuses to start if it does.
+
+Before trusting any change to the analysis code, run the validation (about 10 seconds):
+
+```sh
+docker compose exec worker whoop-lab simulate
+```
+
 ## Operating it
 
 | Task | Command |
 | --- | --- |
 | Logs | `docker compose logs -f worker api` |
 | Reconcile now | `docker compose exec worker whoop-lab sync` |
+| Recompute results now | `docker compose exec worker whoop-lab analyze "<experiment name>"` |
 | Backfill from a date | `docker compose exec worker whoop-lab backfill --since 2025-01-01` |
 | Update | `git pull && docker compose up -d --build` |
 | Queue state | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB" -c "select status, count(*) from webhook_events group by 1"'` |

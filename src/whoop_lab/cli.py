@@ -207,7 +207,9 @@ def analyze(experiment: Annotated[str, typer.Argument(help="Experiment name or i
 
 @app.command()
 def simulate(
-    sims: Annotated[int, typer.Option(min=200, help="Simulated experiments per check.")] = 2000,
+    sims: Annotated[
+        int, typer.Option(min=2000, help="Simulated experiments per check (2,000 or more).")
+    ] = 2000,
     phi: Annotated[float, typer.Option(help="AR(1) autocorrelation of the noise.")] = 0.4,
 ) -> None:
     """Validate the analysis on simulated data. Run before trusting any analysis change."""

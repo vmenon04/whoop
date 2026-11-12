@@ -1,4 +1,7 @@
 {
+  "templating": {
+    "list": []
+  },
   "uid": "whoop-data-health",
   "title": "Data health",
   "tags": [

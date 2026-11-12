@@ -17,6 +17,8 @@ x-app: &app
     NTFY_TOKEN: ${NTFY_TOKEN:-}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
     GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-}
+    ASSIGN_HOUR: ${ASSIGN_HOUR:-20}
+    TAG_KEYS: ${TAG_KEYS:-alcohol,late_meal,late_caffeine,late_screens,sick,travel,hard_training}
 
 services:
   db:

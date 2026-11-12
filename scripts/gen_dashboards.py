@@ -100,8 +100,16 @@ def layout(rows: list[tuple[int, list[Panel]]]) -> list[Panel]:
     return placed
 
 
-def dashboard(uid: str, title: str, panels: list[Panel], *, days: int) -> dict[str, Any]:
+def dashboard(
+    uid: str,
+    title: str,
+    panels: list[Panel],
+    *,
+    days: int,
+    variables: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
+        "templating": {"list": variables or []},
         "uid": uid,
         "title": title,
         "tags": ["whoop-lab"],
@@ -225,7 +233,130 @@ DATA_HEALTH = dashboard(
     days=30,
 )
 
-DASHBOARDS = {"data-health.json": DATA_HEALTH}
+# `experiment_id::text = '${experiment}'` stays valid SQL when no experiment exists yet.
+THIS = "experiment_id::text = '${experiment}'"
+LATEST = f"{THIS} AND computed_at = (SELECT max(computed_at) FROM experiment_results WHERE {THIS})"
+PRIMARY = f"{LATEST} AND method = 'itt_randomization'"
+
+EXPERIMENT_VARIABLE = {
+    "type": "query",
+    "name": "experiment",
+    "label": "Experiment",
+    "datasource": DS,
+    "query": "SELECT name AS __text, id::text AS __value FROM experiments "
+    "WHERE locked_at IS NOT NULL ORDER BY id DESC",
+    "refresh": 1,
+    "sort": 0,
+    "multi": False,
+    "includeAll": False,
+}
+
+EXPERIMENT_RESULTS = dashboard(
+    "whoop-experiment-results",
+    "Experiment results",
+    layout(
+        [
+            (
+                4,
+                [
+                    stat(
+                        "Primary estimate",
+                        f"SELECT effect FROM experiment_results WHERE {PRIMARY}",
+                        steps=[(None, "text")],
+                    )
+                    | {
+                        "fieldConfig": {
+                            "defaults": {
+                                "decimals": 3,
+                                "noValue": "none",
+                                "thresholds": {
+                                    "mode": "absolute",
+                                    "steps": [{"value": None, "color": "text"}],
+                                },
+                            },
+                            "overrides": [],
+                        }
+                    },
+                    stat(
+                        "p-value (randomization test)",
+                        f"SELECT p_value FROM experiment_results WHERE {PRIMARY}",
+                        steps=[(None, "text")],
+                    )
+                    | {
+                        "fieldConfig": {
+                            "defaults": {
+                                "decimals": 3,
+                                "noValue": "none",
+                                "thresholds": {
+                                    "mode": "absolute",
+                                    "steps": [{"value": None, "color": "text"}],
+                                },
+                            },
+                            "overrides": [],
+                        }
+                    },
+                    stat(
+                        "Days analysed (treatment + control)",
+                        f"SELECT n_treatment + n_control FROM experiment_results WHERE {PRIMARY}",
+                        steps=[(None, "text")],
+                    ),
+                    stat(
+                        "Mornings missing",
+                        "SELECT n_missing_treatment + n_missing_control "
+                        f"FROM experiment_results WHERE {PRIMARY}",
+                        steps=[(None, "green"), (1, "orange"), (6, "red")],
+                    ),
+                ],
+            ),
+            (
+                9,
+                [
+                    series(
+                        "Running primary estimate with 95% interval (the end date is fixed; this is not a stopping rule)",
+                        'SELECT computed_at AS time, effect AS estimate, ci_low AS "interval low", '
+                        'ci_high AS "interval high" FROM experiment_results '
+                        f"WHERE {THIS} AND method = 'itt_randomization' ORDER BY 1",
+                    )
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "Next-morning HRV by assigned arm (ms)",
+                        "SELECT (a.local_date + 1)::timestamp AS time, a.arm AS metric, "
+                        "o.hrv_rmssd_milli AS hrv FROM assignments a "
+                        f"JOIN daily_outcomes o USING (local_date) WHERE a.{THIS} "
+                        "AND o.outcome_scored ORDER BY 1",
+                        unit="ms",
+                        drawStyle="points",
+                        pointSize=8,
+                    ),
+                    table(
+                        "Assignments and compliance",
+                        "SELECT local_date, arm, complied, note FROM assignments "
+                        f"WHERE {THIS} ORDER BY local_date DESC",
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    table(
+                        "Latest results, every method (only the first row is the primary analysis)",
+                        "SELECT outcome_metric, method, effect, ci_low, ci_high, p_value, n_treatment, "
+                        "n_control, n_missing_treatment + n_missing_control AS missing, compromised "
+                        f"FROM experiment_results WHERE {LATEST} ORDER BY id",
+                    )
+                ],
+            ),
+        ]
+    ),
+    days=60,
+    variables=[EXPERIMENT_VARIABLE],
+)
+
+DASHBOARDS = {"data-health.json": DATA_HEALTH, "experiment-results.json": EXPERIMENT_RESULTS}
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
