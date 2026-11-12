@@ -21,6 +21,7 @@ from sqlalchemy.pool import NullPool
 from testcontainers.community.postgres import PostgresContainer
 
 from tests.fakes import FakeTokenServer
+from whoop_lab.api.app import create_app
 from whoop_lab.config import Settings
 from whoop_lab.db import SessionFactory, make_session_factory
 from whoop_lab.models import Base
@@ -80,4 +81,19 @@ def token_server(whoop_mock: respx.MockRouter, settings: Settings) -> FakeTokenS
 @pytest.fixture
 async def http() -> AsyncIterator[httpx.AsyncClient]:
     async with httpx.AsyncClient() as client:
+        yield client
+
+
+@pytest.fixture
+async def api(
+    settings: Settings, session_factory: SessionFactory
+) -> AsyncIterator[httpx.AsyncClient]:
+    """The FastAPI app, called in-process."""
+    app = create_app(settings, session_factory)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="https://whoop.test"
+        ) as client,
+    ):
         yield client

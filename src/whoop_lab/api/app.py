@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 
-from whoop_lab.api.routes import health, oauth
+from whoop_lab.api.routes import health, oauth, webhooks
 from whoop_lab.config import Settings, get_settings
 from whoop_lab.db import SessionFactory, make_engine, make_session_factory
 from whoop_lab.log import configure_logging
@@ -44,4 +44,5 @@ def create_app(
     app.state.settings = settings
     app.include_router(health.router)
     app.include_router(oauth.router)
+    app.include_router(webhooks.router)
     return app
