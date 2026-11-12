@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import text
+from collections.abc import Mapping
+
+from sqlalchemy import URL, make_url, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -17,7 +19,37 @@ type SessionFactory = async_sessionmaker[AsyncSession]
 TOKEN_LOCK_KEY = 7_746_001
 
 
-def make_engine(database_url: str) -> AsyncEngine:
+DRIVER = "postgresql+asyncpg"
+
+
+def build_database_url(
+    *, user: str, password: str, database: str, host: str = "db", port: int = 5432
+) -> URL:
+    """Assemble the URL from parts. URL.create escapes them, so any password is safe."""
+    return URL.create(
+        DRIVER, username=user, password=password, host=host, port=port, database=database
+    )
+
+
+def database_url_from_env(env: Mapping[str, str]) -> URL:
+    """DATABASE_URL if set, otherwise the POSTGRES_* parts. Used by Settings and Alembic."""
+    if env.get("DATABASE_URL"):
+        return make_url(env["DATABASE_URL"])
+    missing = [
+        name for name in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB") if not env.get(name)
+    ]
+    if missing:
+        raise RuntimeError(f"set DATABASE_URL or {', '.join(missing)}")
+    return build_database_url(
+        user=env["POSTGRES_USER"],
+        password=env["POSTGRES_PASSWORD"],
+        database=env["POSTGRES_DB"],
+        host=env.get("POSTGRES_HOST") or "db",
+        port=int(env.get("POSTGRES_PORT") or 5432),
+    )
+
+
+def make_engine(database_url: str | URL) -> AsyncEngine:
     return create_async_engine(database_url, pool_pre_ping=True)
 
 

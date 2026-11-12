@@ -1,4 +1,4 @@
-"""Alembic environment. Async engine, URL from DATABASE_URL."""
+"""Alembic environment. Async engine, URL from DATABASE_URL or the POSTGRES_* parts."""
 
 from __future__ import annotations
 
@@ -6,22 +6,29 @@ import asyncio
 import os
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import URL, make_url, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from whoop_lab.db import database_url_from_env
 from whoop_lab.models import Base
 
 config = context.config
 target_metadata = Base.metadata
 
 
-def _url() -> str:
-    return config.get_main_option("sqlalchemy.url") or os.environ["DATABASE_URL"]
+def _url() -> URL:
+    # Tests pass a URL through config attributes; deployments use the environment.
+    override = config.attributes.get("database_url")
+    return make_url(override) if override else database_url_from_env(os.environ)
 
 
 def run_migrations_offline() -> None:
-    context.configure(url=_url(), target_metadata=target_metadata, literal_binds=True)
+    context.configure(
+        url=_url().render_as_string(hide_password=False),
+        target_metadata=target_metadata,
+        literal_binds=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 

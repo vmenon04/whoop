@@ -5,8 +5,11 @@ from __future__ import annotations
 from functools import lru_cache
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import URL, make_url
+
+from whoop_lab.db import build_database_url
 
 WHOOP_SCOPES = (
     "offline",
@@ -22,7 +25,14 @@ WHOOP_SCOPES = (
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = Field(description="postgresql+asyncpg://user:pass@host:5432/db")
+    # Either the parts (what Compose passes; any password works) or a full, already
+    # percent-encoded DATABASE_URL, which wins when both are set.
+    database_url: SecretStr | None = None
+    postgres_host: str = "db"
+    postgres_port: int = 5432
+    postgres_user: str | None = None
+    postgres_password: SecretStr | None = None
+    postgres_db: str | None = None
 
     whoop_client_id: str
     whoop_client_secret: SecretStr
@@ -72,6 +82,30 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_is_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @model_validator(mode="after")
+    def _database_is_configured(self) -> Settings:
+        if self.database_url is None and not (
+            self.postgres_user and self.postgres_password and self.postgres_db
+        ):
+            raise ValueError(
+                "set DATABASE_URL, or POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB"
+            )
+        return self
+
+    @property
+    def db_url(self) -> URL:
+        if self.database_url is not None:
+            return make_url(self.database_url.get_secret_value())
+        if not (self.postgres_user and self.postgres_password and self.postgres_db):
+            raise ValueError("database is not configured")  # unreachable after validation
+        return build_database_url(
+            user=self.postgres_user,
+            password=self.postgres_password.get_secret_value(),
+            database=self.postgres_db,
+            host=self.postgres_host,
+            port=self.postgres_port,
+        )
 
     @property
     def redirect_uri(self) -> str:

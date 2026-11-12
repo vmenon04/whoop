@@ -68,7 +68,7 @@ async def run(settings: Settings) -> None:
     configure_logging(settings.log_level)
     # One line per job run every few seconds is noise; keep warnings and errors.
     logging.getLogger("apscheduler.executors").setLevel(logging.WARNING)
-    engine = make_engine(settings.database_url)
+    engine = make_engine(settings.db_url)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):

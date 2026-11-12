@@ -33,7 +33,7 @@ def create_app(
                 yield
                 return
             configure_logging(settings.log_level)
-            engine = make_engine(settings.database_url)
+            engine = make_engine(settings.db_url)
             app.state.session_factory = make_session_factory(engine)
             try:
                 yield

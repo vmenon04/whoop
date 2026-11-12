@@ -32,7 +32,7 @@ def database_url() -> Iterator[str]:
     with PostgresContainer("postgres:16", driver="asyncpg") as container:
         url: str = container.get_connection_url()
         config = Config("alembic.ini")
-        config.set_main_option("sqlalchemy.url", url)
+        config.attributes["database_url"] = url
         command.upgrade(config, "head")
         yield url
 
@@ -56,7 +56,7 @@ async def session_factory(engine: AsyncEngine) -> SessionFactory:
 def settings(database_url: str) -> Settings:
     return Settings(
         _env_file=None,
-        database_url=database_url,
+        database_url=SecretStr(database_url),
         whoop_client_id="test-client-id",
         whoop_client_secret=SecretStr("test-client-secret"),
         public_base_url="https://whoop.test",
