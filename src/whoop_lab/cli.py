@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 import httpx
 import numpy as np
@@ -25,6 +27,9 @@ from whoop_lab.analysis.simulate import (
     REJECTION_BAND,
     validate,
 )
+from whoop_lab.ble.capture import NOTIFICATIONS_FILE
+from whoop_lab.ble.decode import DECODER_VERSION, load_biometrics
+from whoop_lab.ble.metrics import METRICS_VERSION, nightly
 from whoop_lab.config import get_settings
 from whoop_lab.db import make_engine, make_session_factory
 from whoop_lab.experiments.outcomes import OUTCOMES
@@ -267,6 +272,56 @@ def simulate(
         typer.echo(f"{'PASS' if ok else 'FAIL'}  {title}: {detail}")
     if not report.passed:
         raise typer.Exit(1)
+
+
+def _fmt(value: float | None, digits: int = 1) -> str:
+    return "n/a" if value is None else f"{value:.{digits}f}"
+
+
+@app.command("ble-nights")
+def ble_nights(
+    captures: Annotated[
+        list[Path], typer.Argument(help="Capture directories or notifications.jsonl files.")
+    ],
+    timezone: Annotated[str, typer.Option(help="Zone that defines a night.")] = "America/New_York",
+) -> None:
+    """Nightly metrics from Bluetooth captures. Needs no database; prints to the terminal only."""
+    files = [path / NOTIFICATIONS_FILE if path.is_dir() else path for path in captures]
+    missing = [str(path) for path in files if not path.exists()]
+    if missing:
+        raise typer.BadParameter(f"not found: {', '.join(missing)}")
+    tz = ZoneInfo(timezone)
+    records = load_biometrics(files)
+    typer.echo(f"{len(records)} per-second records; decoder {DECODER_VERSION}; {METRICS_VERSION}")
+    nights = nightly(records, tz)
+    if not nights:
+        typer.echo("No night with a sleep period ending before 14:00 in these captures.")
+        return
+    for night in nights:
+        start = datetime.fromtimestamp(night.sleep_start_unix, tz)
+        end = datetime.fromtimestamp(night.sleep_end_unix, tz)
+        coverage = "n/a" if night.rr_coverage is None else f"{night.rr_coverage:.0%}"
+        typer.echo(f"\nNight ending {night.wake_date}: asleep {start:%H:%M} to {end:%H:%M}")
+        typer.echo(f"  beats with an R-R interval: {coverage}")
+        typer.echo(
+            f"  RMSSD: sleep window {_fmt(night.rmssd_sleep_ms)} ms; "
+            f"02:00-06:00 {_fmt(night.rmssd_fixed_ms)} ms; "
+            f"median of {night.rmssd_segments} five-minute segments "
+            f"{_fmt(night.rmssd_segment_median_ms)} ms"
+        )
+        typer.echo(
+            f"  resting heart rate: median {_fmt(night.resting_hr_median)} bpm; "
+            f"lowest five minutes {_fmt(night.resting_hr_lowest_segment)} bpm"
+        )
+        typer.echo(
+            f"  respiratory rate: {_fmt(night.respiratory_rate)} per minute "
+            f"({night.respiratory_windows} windows)"
+        )
+        typer.echo(
+            f"  blood oxygen (unconfirmed field): {_fmt(night.spo2_mean)}% "
+            f"({night.spo2_windows} windows)"
+        )
+        typer.echo(f"  skin temperature: {_fmt(night.skin_temp_mean_c, 2)} C")
 
 
 def main() -> None:

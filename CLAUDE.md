@@ -18,6 +18,8 @@ docker compose exec worker whoop-lab sync [--days N]
 docker compose exec worker whoop-lab power --outcome ln_hrv_rmssd --days 28
 docker compose exec worker whoop-lab analyze <name-or-id>
 uv run whoop-lab simulate                 # analysis validation; needs no database
+uv run --group ble python scripts/ble_spike.py --help   # talk to the band (see the whoop-ble skill)
+uv run whoop-lab ble-nights captures/*   # nightly metrics from Bluetooth captures; needs no database
 uv run python scripts/gen_dashboards.py   # regenerate grafana/dashboards/*.json
 ```
 
