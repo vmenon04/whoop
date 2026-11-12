@@ -24,6 +24,7 @@ from whoop_lab.ble.commands import (
     Command,
     CommandNotAllowedError,
     build_allowed,
+    build_history_ack,
     metadata_type,
     parse_data_range,
     parse_hello,
@@ -155,10 +156,35 @@ def test_every_command_number_outside_the_allowlist_is_refused() -> None:
                 build_allowed(command, sequence=7)
 
 
-def test_the_history_acknowledgement_is_not_sendable() -> None:
-    """Command 23 moves the band's trim position, taking records away from the WHOOP app."""
+def test_the_history_acknowledgement_cannot_be_built_from_a_number() -> None:
+    """Command 23 moves the band's trim position. It exists only as build_history_ack,
+    which echoes the band's own token and cannot name an arbitrary position."""
     with pytest.raises(CommandNotAllowedError):
         build_allowed(23, sequence=1)
+
+
+def test_acknowledgement_echoes_the_token_of_a_real_history_end_frame() -> None:
+    token = bytes.fromhex("41b6010010000000")
+    ack = build_history_ack(metadata_frame(2, token), sequence=9)
+    check_frame(ack)
+    assert ack[8:12] == bytes([35, 9, 23, 1])
+    assert ack[12:20] == token
+    assert len(ack) == 24
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        metadata_frame(1),  # HISTORY_START
+        metadata_frame(3),  # HISTORY_COMPLETE
+        record_frame(18, 1, 1_790_000_000),
+        metadata_frame(2)[:-1] + b"\x00",  # damaged
+        b"",
+    ],
+)
+def test_acknowledgement_is_refused_without_a_valid_history_end_frame(frame: bytes) -> None:
+    with pytest.raises(CommandNotAllowedError):
+        build_history_ack(frame, sequence=1)
 
 
 def test_no_list_overlaps_another() -> None:

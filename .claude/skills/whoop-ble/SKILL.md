@@ -17,6 +17,7 @@ When the band contradicts this file, the band wins: update the file and say so.
 ## Safety rules, never relaxed
 
 1. Send only commands in `whoop_lab.ble.commands.ALLOWED`, with exactly the argument bytes listed there. `build_allowed()` is the only way to build a command frame. Do not add a function that takes free arguments.
+1a. The one exception is `build_history_ack()`, which builds `HISTORICAL_DATA_RESULT` (23) from the band's own `HISTORY_END` frame and can only echo that frame's token. It consumes history (see below), so write and fsync the chunk before sending it. Never build command 23 from a page number: an older position rewinds the band's history, and only the owner can approve that.
 2. Adding a command to `ALLOWED` is the band owner's decision. Ask first, every time, and say what the command changes on the band.
 3. Never send anything in `NEVER`: firmware, reboot, power cycle, trim, read pointer, fuel gauge, calibration, certificates, lock, clock, alarms, advertising name, LED or analog front-end settings, feature flags, device configuration.
 4. If a command's effect is not documented by a source, it is unknown. Do not send it. Ask.
@@ -31,7 +32,7 @@ When the band contradicts this file, the band wins: update the file and say so.
 - So a normal drain by this project means WHOOP's cloud never receives those hours, and the API side of this project gets gaps.
 - Without an acknowledgement the band stops after the first burst and trim does not move. That is what `ble_spike.py peek` relies on, and it reads the range before and after to check.
 - ONE SOURCE (wearable5.0, one band, firmware 50.43.2): an acknowledgement carrying an older position, sent during a transfer, moves trim back, so a drain can be undone and the app then uploads everything. Not allowed here until the owner decides.
-- DISPUTED: whether pairing a new central removes the phone's bond. wearable5.0 and noop say the WHOOP app must be re-paired; whoop-vault says not.
+- BAND (2026-11-12): pairing the Mac removed the phone's bond; the WHOOP app had to be re-paired afterwards. Swapping between the app and this project costs a re-pair each way.
 
 ## GATT (BAND, 2026-11-12)
 

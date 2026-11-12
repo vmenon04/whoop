@@ -15,7 +15,7 @@ import struct
 from dataclasses import dataclass
 from enum import IntEnum
 
-from whoop_lab.ble.framing import build_frame
+from whoop_lab.ble.framing import FrameError, build_frame, check_frame
 
 PACKET_COMMAND = 35
 PACKET_COMMAND_RESPONSE = 36
@@ -134,6 +134,32 @@ def build_allowed(command: int, sequence: int) -> bytes:
             f"command {command} ({name}) is not on the allowlist"
         ) from None
     return build_frame(bytes([PACKET_COMMAND, sequence & 0xFF, allowed]) + args)
+
+
+HISTORICAL_DATA_RESULT = 23
+_END_TOKEN = slice(21, 29)
+
+
+def build_history_ack(history_end_frame: bytes, sequence: int) -> bytes:
+    """Acknowledge one history chunk by echoing the token of its own HISTORY_END frame.
+
+    This MOVES THE BAND'S TRIM POSITION: the acknowledged records are gone for every
+    other client, the WHOOP app included. Send it only after the chunk is safely on disk.
+
+    The token can come from nowhere else. Command 23 with any other position rewinds
+    or skips the band's history, which is why it is not in ALLOWED and why this
+    function takes the band's frame and not a page number.
+    """
+    try:
+        check_frame(history_end_frame)
+    except FrameError as exc:
+        raise CommandNotAllowedError(f"not a valid frame: {exc}") from None
+    if metadata_type(history_end_frame) != META_HISTORY_END or len(history_end_frame) < 33:
+        raise CommandNotAllowedError("an acknowledgement needs the band's HISTORY_END frame")
+    token = history_end_frame[_END_TOKEN]
+    return build_frame(
+        bytes([PACKET_COMMAND, sequence & 0xFF, HISTORICAL_DATA_RESULT, 0x01]) + token
+    )
 
 
 # --- replies ------------------------------------------------------------------------------

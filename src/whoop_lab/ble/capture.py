@@ -12,6 +12,7 @@ Captures contain biometric data and device identifiers. They live under
 from __future__ import annotations
 
 import json
+import os
 import struct
 import time
 from collections import Counter
@@ -52,6 +53,12 @@ class CaptureWriter:
         if direction == "rx":
             self.received += 1
             self.received_bytes += len(data)
+
+    def sync(self) -> None:
+        """Force everything written so far onto the disk. Call before acknowledging
+        history: once acknowledged, the band will not send those records again."""
+        self._file.flush()
+        os.fsync(self._file.fileno())
 
     def close(self) -> None:
         self._file.close()
