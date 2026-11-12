@@ -104,7 +104,7 @@ The status page shows row counts, the last webhook and recent syncs.
 
 How it is analysed:
 
-- **Outcome mapping:** the outcome for day D is the recovery from the main sleep ending on the morning of D+1, in `LOCAL_TIMEZONE`. Naps, unscored and deleted records never count. This is defined once, in the `daily_outcomes` view.
+- **Outcome mapping:** the outcome for day D is the recovery from the main sleep ending on the morning of D+1 (before 14:00), in `LOCAL_TIMEZONE`. A sleep that ends later in the day is never the main sleep. Naps, unscored and deleted records never count. This is defined once, in the `daily_outcomes` view.
 - **Primary result:** intention to treat. Days are compared by the arm they were assigned, whether or not you complied. The p-value and the 95% interval come from re-drawing the block randomization 10,000 times.
 - **Secondary results, labelled as such:** a covariate-adjusted model, a per-protocol estimate (biased, because compliance is not randomized), and the other outcomes (exploratory).
 - **Missing mornings** are dropped and counted. More than 20% missing, or a gap of more than 3 between arms, marks the result as compromised.

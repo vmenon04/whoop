@@ -33,7 +33,7 @@ Run ruff, mypy and pytest before every commit. Small commits, one concern each, 
 6. Cycles have no webhook. The reconcile job polls them and re-fetches the trailing 7 days of every collection. It is the safety net; never remove it.
 7. Every record is stored as `raw jsonb` plus typed columns. Every write is an idempotent upsert keyed on the WHOOP ID. `score_state` is stored; only `SCORED` rows may reach analysis.
 8. All WHOOP data calls go through `WhoopClient`, which handles `X-RateLimit-*` and 429.
-9. Timestamps are UTC (`timestamptz`) with WHOOP's `timezone_offset` kept. An experiment day is a local calendar date (`LOCAL_TIMEZONE`, copied into `app_config` by `setup-db`). The day-to-outcome mapping lives only in the `daily_outcomes` view (migration 0003); analysis and Grafana read the view and nothing re-derives it.
+9. Timestamps are UTC (`timestamptz`) with WHOOP's `timezone_offset` kept. An experiment day is a local calendar date (`LOCAL_TIMEZONE`, copied into `app_config` by `setup-db`). The day-to-outcome mapping lives only in the `daily_outcomes` view (migration 0003, replaced by 0006, which adds the 14:00 local wake cutoff); analysis and Grafana read the view and nothing re-derives it. To change the view, add a migration with the full `CREATE OR REPLACE VIEW`.
 10. Config comes from env vars through `Settings`. The database URL is built from `POSTGRES_*` parts with `URL.create` (never by string interpolation), in `Settings.db_url` and Alembic alike. Never commit secrets. Never log tokens, the client secret or an Authorization header.
 11. Cloudflare Access protects every path except `/webhooks/whoop` and the static `/privacy` page (WHOOP's app registration needs a public privacy URL). No login system in the app. Nothing public may read the database.
 
@@ -54,7 +54,7 @@ Run ruff, mypy and pytest before every commit. Small commits, one concern each, 
 
 The `experiment-analysis` skill is the authority; these are where its rules live in code.
 
-- `experiments/service.py` is the only writer of `experiments` and `assignments`. Triggers in migration 0004 enforce the same rules: a locked experiment changes only in `status`, assignments change only in `complied` and `note`, `experiment_results` is append-only. `TRUNCATE` bypasses row triggers; only tests use it.
+- `experiments/service.py` is the only writer of `experiments` and `assignments`. Triggers in migrations 0004 and 0005 enforce the same rules: a locked experiment changes only in `status`, assignments change only in `complied` and `note` and are inserted only after the latest assigned day of a running experiment, `experiment_results` is append-only. `TRUNCATE` bypasses row triggers; only tests use it.
 - Locking sets `started_on` to tomorrow. `planned_days` counts assigned days; every assigned day (either arm) is followed by `washout_days` days with no row, which do not count. A missed evening leaves a gap that is never filled in.
 - Tomorrow's arm is drawn by `experiments/jobs.py:assign_tomorrow`, never before `ASSIGN_HOUR`. No page or query shows anything beyond the rows that exist.
 - Each block gets a fresh seed stored on its rows; `randomize.arm_for(seed, block_size, position)` reproduces any arm.

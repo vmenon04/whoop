@@ -22,7 +22,7 @@ This code produces causal claims from about 30 data points. A bug here does not 
 ## Day mapping details
 
 - Local date uses the configured timezone (default America/New_York), not UTC and not the server's zone.
-- Main sleep for D+1 morning = the non-nap sleep whose end falls on local date D+1. If there are several, take the longest.
+- Main sleep for D+1 morning = the non-nap sleep whose end falls on local date D+1 before 14:00 local. If there are several, take the longest. A sleep ending in the afternoon or evening is never a main sleep, so an evening doze cannot stand in for an unrecorded night.
 - Covariates for day D (strain, workouts, tags) come from local date D.
 - Test across both DST transitions and across a night with a nap.
 
