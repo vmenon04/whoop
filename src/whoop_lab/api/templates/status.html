@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% macro when(value) %}{% if value %}{{ value.astimezone(tz).strftime("%b %-d, %H:%M") }}{% else %}<span class="muted">never</span>{% endif %}{% endmacro %}
+{% block content %}
+<h1>whoop-lab</h1>
+
+<h2>WHOOP connection</h2>
+{% if token_status == "active" %}
+<p class="ok">Connected.</p>
+<dl>
+  <dt>Token refreshed</dt><dd>{{ when(token_updated_at) }}</dd>
+  <dt>Token expires</dt><dd>{{ when(token_expires_at) }}</dd>
+</dl>
+{% elif token_status %}
+<p class="bad">Sign-in needed: WHOOP rejected the last token refresh.</p>
+<p><a class="button" href="/oauth/start">Reconnect WHOOP</a></p>
+{% else %}
+<p class="muted">Not connected yet.</p>
+<p><a class="button" href="/oauth/start">Connect WHOOP</a></p>
+{% endif %}
+
+<h2>Data</h2>
+<dl>
+{% for t in tables %}
+  <dt>{{ t.label }}</dt><dd>{{ t.count }} <span class="muted">· latest {{ when(t.latest) }}</span></dd>
+{% endfor %}
+</dl>
+
+<h2>Webhooks</h2>
+<dl>
+  <dt>Last received</dt><dd>{{ when(last_event) }}</dd>
+  <dt>Done</dt><dd>{{ events.get("done", 0) }}</dd>
+  <dt>Pending</dt><dd>{{ events.get("pending", 0) }}</dd>
+  <dt>Failed</dt><dd{% if events.get("failed", 0) %} class="bad"{% endif %}>{{ events.get("failed", 0) }}</dd>
+</dl>
+
+<h2>Recent syncs</h2>
+{% if runs %}
+<dl>
+{% for run in runs %}
+  <dt>{{ when(run.started_at) }}</dt>
+  <dd>{{ run.kind }} · {{ run.rows_upserted }} upserted{% if run.rows_deleted %}, {{ run.rows_deleted }} removed{% endif %}
+    {% if run.error %}<br><span class="bad">{{ run.error }}</span>{% elif not run.finished_at %}<br><span class="muted">running</span>{% endif %}</dd>
+{% endfor %}
+</dl>
+{% else %}
+<p class="muted">No sync has run yet.</p>
+{% endif %}
+<p class="muted">Times in {{ tz.key }}.</p>
+{% endblock %}
