@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whoop_lab.experiments.outcomes import OUTCOMES, default_analysis_spec
+from whoop_lab.experiments.outcomes import OUTCOMES, SECONDARY_DEFAULT, default_analysis_spec
 from whoop_lab.experiments.randomize import Slot, arm_for, in_washout, next_slot, stratum_for
 from whoop_lab.models.experiments import (
     STATUS_ACTIVE,
@@ -42,6 +42,10 @@ FROZEN_AFTER_LOCK = frozenset(
         "locked_at",
     }
 )
+
+
+# Set by lock_experiment alone, never by an edit.
+SET_BY_LOCKING = frozenset({"started_on", "locked_at"})
 
 
 class ExperimentError(Exception):
@@ -120,9 +124,12 @@ async def _get_for_update(session: AsyncSession, experiment_id: int) -> Experime
 async def update_experiment(
     session: AsyncSession, experiment_id: int, **changes: Any
 ) -> Experiment:
-    """Edit a draft. Refuses any frozen field once the experiment is locked."""
+    """Edit a draft. Refuses any frozen field once the experiment is locked.
+
+    The outcome metric and the analysis spec's primary outcome always move together.
+    """
     experiment = await _get_for_update(session, experiment_id)
-    unknown = set(changes) - FROZEN_AFTER_LOCK
+    unknown = set(changes) - (FROZEN_AFTER_LOCK - SET_BY_LOCKING)
     if unknown:
         raise ExperimentError(f"cannot set {sorted(unknown)}")
     if experiment.locked_at is not None:
@@ -130,6 +137,16 @@ async def update_experiment(
             f"experiment {experiment.name!r} is locked; {sorted(changes)} cannot change"
         )
     _validate(changes)
+    metric = changes.get("outcome_metric", experiment.outcome_metric)
+    if "analysis_spec" in changes:
+        if changes["analysis_spec"].get("primary_outcome") != metric:
+            raise ExperimentError("the analysis spec's primary outcome must be the outcome metric")
+    elif "outcome_metric" in changes:
+        changes["analysis_spec"] = {
+            **experiment.analysis_spec,
+            "primary_outcome": metric,
+            "secondary_outcomes": [key for key in SECONDARY_DEFAULT if key != metric],
+        }
     for name, value in changes.items():
         setattr(experiment, name, value)
     await session.flush()

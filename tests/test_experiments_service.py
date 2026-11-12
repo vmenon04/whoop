@@ -11,6 +11,7 @@ from sqlalchemy.exc import DBAPIError
 
 from whoop_lab.db import SessionFactory
 from whoop_lab.experiments import service
+from whoop_lab.experiments.outcomes import default_analysis_spec
 from whoop_lab.experiments.randomize import arm_for
 from whoop_lab.experiments.service import Draft, ExperimentError, LockedError
 from whoop_lab.models import Assignment, Experiment, ExperimentResult
@@ -100,6 +101,39 @@ async def test_a_draft_can_be_edited_and_deleted(session_factory: SessionFactory
         await service.delete_draft(session, experiment.id)
     async with session_factory() as session:
         assert (await session.execute(select(Experiment))).first() is None
+
+
+async def test_changing_a_drafts_outcome_moves_the_analysis_spec_with_it(
+    session_factory: SessionFactory,
+) -> None:
+    async with session_factory() as session, session.begin():
+        experiment = await service.create_draft(session, draft())
+        seed = experiment.analysis_spec["seed"]
+        await service.update_experiment(session, experiment.id, outcome_metric="resting_heart_rate")
+    async with session_factory() as session:
+        saved = await session.get_one(Experiment, experiment.id)
+    assert saved.outcome_metric == "resting_heart_rate"
+    # Exactly the spec a draft created with this outcome would have, seed kept.
+    assert saved.analysis_spec == default_analysis_spec("resting_heart_rate", seed)
+    assert "resting_heart_rate" not in saved.analysis_spec["secondary_outcomes"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"locked_at": None},
+        {"started_on": TODAY},
+        {"status": "active"},
+        {"analysis_spec": {"primary_outcome": "deep_sleep_minutes"}},  # disagrees with the metric
+    ],
+)
+async def test_a_draft_edit_cannot_set_lock_fields_or_a_mismatched_spec(
+    session_factory: SessionFactory, change: dict[str, Any]
+) -> None:
+    async with session_factory() as session, session.begin():
+        experiment = await service.create_draft(session, draft())
+        with pytest.raises(ExperimentError):
+            await service.update_experiment(session, experiment.id, **change)
 
 
 async def test_lock_starts_tomorrow(session_factory: SessionFactory) -> None:
