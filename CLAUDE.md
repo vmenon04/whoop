@@ -49,6 +49,7 @@ Run ruff, mypy and pytest before every commit. Small commits, one concern each, 
 - Tests use real Postgres and mock every outbound HTTP call with respx (`whoop_mock` fails on any unmocked request). Payload builders are in `tests/payloads.py`.
 - Jobs are declared in `worker/main.py:build_scheduler`, in code, with no job store.
 - Before touching WHOOP code read the `whoop-api` skill; before touching experiment or analysis code read the `experiment-analysis` skill. Where that skill is stricter than the design doc, the skill wins.
+- Before touching anything under `src/whoop_lab/ble` or `scripts/ble_spike.py` read the `whoop-ble` skill. Only commands in `ble/commands.py:ALLOWED` may be sent to the band, built by `build_allowed()`; adding one is the owner's decision. Captures go to `captures/` (git-ignored) and are never committed. bleak lives in the optional `ble` dependency group (`uv run --group ble ...`), so the server image does not carry it.
 
 ## Experiment and analysis conventions
 

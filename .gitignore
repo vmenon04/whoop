@@ -11,3 +11,6 @@ __pycache__/
 dist/
 backups/
 .claude/settings.local.json
+# Bluetooth captures hold biometric data and device identifiers. Never commit them.
+captures/
+*.frames.jsonl

@@ -116,5 +116,6 @@ No WHOOP API call, no token access and no business logic in the request path.
 
 ## Out of bounds
 
-- No unofficial, private or app-internal WHOOP endpoints.
+- No private, unofficial or app-internal WHOOP **cloud** endpoints. This skill covers the official developer API only.
+- Talking to the owner's own band over local Bluetooth LE is in scope for the project, but not for this skill: it is governed by the `whoop-ble` skill and its safety rules.
 - No v1 endpoints or v1 webhook model.
