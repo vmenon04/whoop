@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     public_base_url: str = "https://whoop.vasumenon.com"
 
     whoop_auth_url: str = "https://api.prod.whoop.com/oauth/oauth2/auth"
-    whoop_token_url: str = "https://api.prod.whoop.com/oauth/oauth2/token"  # noqa: S105
+    whoop_token_url: str = "https://api.prod.whoop.com/oauth/oauth2/token"
     whoop_api_base_url: str = "https://api.prod.whoop.com/developer"
 
     local_timezone: str = "America/New_York"

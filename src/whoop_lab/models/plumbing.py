@@ -10,8 +10,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from whoop_lab.models.base import Base
 
-TOKEN_ACTIVE = "active"  # noqa: S105
-TOKEN_REAUTH_REQUIRED = "reauth_required"  # noqa: S105
+TOKEN_ACTIVE = "active"
+TOKEN_REAUTH_REQUIRED = "reauth_required"
 
 EVENT_PENDING = "pending"
 EVENT_DONE = "done"
