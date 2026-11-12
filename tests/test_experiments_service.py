@@ -382,6 +382,58 @@ async def test_database_refuses_changes_to_assignments(
     assert after == before
 
 
+INSERT_ASSIGNMENT = (
+    "INSERT INTO assignments "
+    "(experiment_id, local_date, arm, stratum, block_index, block_position, seed) "
+    "VALUES (:id, :day, 'treatment', 'all', :block, 0, 1)"
+)
+
+
+@pytest.mark.parametrize(
+    ("offset", "message"),
+    [
+        (-1, "before the experiment starts"),
+        (1, "not after the latest assigned day"),  # the skipped day
+        (2, "not after the latest assigned day"),  # the latest day itself is caught first
+        (0, "not after the latest assigned day"),
+    ],
+)
+async def test_database_refuses_back_dated_or_filled_in_assignments(
+    session_factory: SessionFactory, offset: int, message: str
+) -> None:
+    experiment_id = await make_locked(session_factory)
+    async with session_factory() as session, session.begin():
+        await service.assign_day(session, experiment_id, START)
+        await service.assign_day(session, experiment_id, START + timedelta(days=2))
+    async with session_factory() as session:
+        with pytest.raises(DBAPIError, match=message):
+            await session.execute(
+                text(INSERT_ASSIGNMENT),
+                {"id": experiment_id, "day": START + timedelta(days=offset), "block": 7},
+            )
+    assert len(await assignments(session_factory, experiment_id)) == 2
+
+
+async def test_database_refuses_assignments_beyond_planned_days_or_outside_a_run(
+    session_factory: SessionFactory,
+) -> None:
+    async with session_factory() as session, session.begin():
+        still_draft = await service.create_draft(session, draft(name="Draft"))
+    async with session_factory() as session:
+        with pytest.raises(DBAPIError, match="running experiment"):
+            await session.execute(
+                text(INSERT_ASSIGNMENT), {"id": still_draft.id, "day": START, "block": 0}
+            )
+    experiment_id = await make_locked(session_factory, planned_days=2)
+    await assign_range(session_factory, experiment_id, 2)
+    async with session_factory() as session:
+        with pytest.raises(DBAPIError, match="planned days"):
+            await session.execute(
+                text(INSERT_ASSIGNMENT),
+                {"id": experiment_id, "day": START + timedelta(days=5), "block": 9},
+            )
+
+
 async def test_results_are_append_only(session_factory: SessionFactory) -> None:
     experiment_id = await make_locked(session_factory)
     async with session_factory() as session, session.begin():
