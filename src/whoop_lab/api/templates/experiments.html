@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Experiments · whoop-lab{% endblock %}
+{% block content %}
+<h1>Experiments</h1>
+{% if error %}<p class="bad" role="alert">{{ error }}</p>{% endif %}
+
+{% for card in cards %}
+{% set e = card.experiment %}
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <a href="/experiments/{{ e.id }}"><strong>{{ e.name }}</strong></a>
+    <span class="{{ 'ok' if e.status == 'active' else 'muted' }}">{{ e.status }}</span>
+  </div>
+  <p class="small muted">{{ e.hypothesis }}</p>
+  {% if e.locked_at %}
+    <p class="small">{{ card.assigned }} of {{ e.planned_days }} days assigned · started {{ e.started_on.strftime("%b %-d") }}</p>
+    {% if card.primary %}
+      <p class="small">{{ card.primary.sentence }}</p>
+    {% else %}
+      <p class="small muted">No results yet.</p>
+    {% endif %}
+  {% else %}
+    <p class="small">{{ e.planned_days }} days · blocks of {{ e.block_size }}{% if e.washout_days %} · {{ e.washout_days }} washout days{% endif %}{% if e.stratify_weekend %} · weekday/weekend strata{% endif %}</p>
+    <div class="row">
+      <form method="post" action="/experiments/{{ e.id }}/lock" class="inline" hx-confirm="Lock {{ e.name }}? The plan cannot be changed afterwards and the first arm is drawn tonight.">
+        <button class="primary">Lock and start</button>
+      </form>
+      <form method="post" action="/experiments/{{ e.id }}/delete" class="inline" hx-confirm="Delete this draft?">
+        <button class="danger">Delete draft</button>
+      </form>
+    </div>
+  {% endif %}
+</div>
+{% else %}
+<p class="muted">No experiments yet.</p>
+{% endfor %}
+
+<details {% if not cards or error %}open{% endif %}>
+  <summary><strong>New draft</strong></summary>
+  <form method="post" action="/experiments">
+    <label for="name">Name</label>
+    <input id="name" name="name" required placeholder="Caffeine cutoff">
+    <label for="hypothesis">Hypothesis</label>
+    <textarea id="hypothesis" name="hypothesis" required rows="2" placeholder="A noon caffeine cutoff raises next-morning HRV."></textarea>
+    <label for="intervention">Treatment days</label>
+    <input id="intervention" name="intervention" required placeholder="Last caffeine by noon">
+    <label for="control">Control days</label>
+    <input id="control" name="control" required placeholder="Last caffeine by 4pm">
+    <label for="outcome_metric">Primary outcome</label>
+    <select id="outcome_metric" name="outcome_metric">
+      {% for key, outcome in outcomes.items() %}<option value="{{ key }}">{{ outcome.label }}</option>{% endfor %}
+    </select>
+    <label for="planned_days">Assigned days</label>
+    <input id="planned_days" name="planned_days" type="number" min="4" value="28" required inputmode="numeric">
+    <label for="block_size">Block size (even)</label>
+    <input id="block_size" name="block_size" type="number" min="2" step="2" value="4" inputmode="numeric">
+    <label for="washout_days">Washout days after a treatment day</label>
+    <input id="washout_days" name="washout_days" type="number" min="0" value="0" inputmode="numeric">
+    <label><input type="checkbox" name="stratify_weekend" value="1" style="width:auto; min-height:0"> Randomize weekdays and weekends separately</label>
+    <p><button class="primary">Save draft</button></p>
+    <p class="small muted">A draft can be deleted and re-created. Locking freezes everything on this form and the analysis plan.</p>
+  </form>
+</details>
+{% endblock %}

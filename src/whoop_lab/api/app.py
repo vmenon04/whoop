@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
-from whoop_lab.api.routes import health, oauth, status, webhooks
+from whoop_lab.api.routes import experiments, health, oauth, status, today, webhooks
 from whoop_lab.config import Settings, get_settings
 from whoop_lab.db import SessionFactory, make_engine, make_session_factory
 from whoop_lab.log import configure_logging
@@ -46,4 +48,7 @@ def create_app(
     app.include_router(oauth.router)
     app.include_router(webhooks.router)
     app.include_router(status.router)
+    app.include_router(today.router)
+    app.include_router(experiments.router)
+    app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
     return app

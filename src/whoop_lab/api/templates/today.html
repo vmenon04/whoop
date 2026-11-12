@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Today · whoop-lab{% endblock %}
+{% macro arm_card(assignment, when) %}
+<div class="arm {{ assignment.arm }}">
+  <div class="label">{{ when }} · {{ assignment.arm }}</div>
+  <div class="what">{{ experiment.intervention if assignment.arm == "treatment" else experiment.control }}</div>
+</div>
+{% endmacro %}
+{% block content %}
+<h1>{{ today.strftime("%A, %b %-d") }}</h1>
+
+{% if experiment %}
+  {% if assignments.today %}
+    {{ arm_card(assignments.today, "Today") }}
+  {% else %}
+    <div class="card muted">No arm today{% if experiment.started_on and today < experiment.started_on %}: {{ experiment.name }} starts tomorrow{% elif experiment.washout_days %} (washout or unassigned day){% endif %}.</div>
+  {% endif %}
+  {% if assignments.tomorrow %}
+    {{ arm_card(assignments.tomorrow, "Tomorrow") }}
+  {% else %}
+    <p class="muted small">Tomorrow's arm is drawn after {{ "%d:00"|format(assign_hour) }}.</p>
+  {% endif %}
+
+  {% if assignments.yesterday %}
+  {% set a = assignments.yesterday %}
+  <h2>Yesterday · {{ a.arm }}</h2>
+  <p>{{ experiment.intervention if a.arm == "treatment" else experiment.control }}. Did you follow it?</p>
+  <form method="post" action="/today/compliance">
+    <input type="hidden" name="day" value="{{ yesterday.isoformat() }}">
+    <div class="row">
+      <button name="complied" value="yes" class="{{ 'on' if a.complied is true }}">Yes</button>
+      <button name="complied" value="no" class="{{ 'on' if a.complied is false }}">No</button>
+      <input name="note" value="{{ a.note or '' }}" placeholder="Note (optional)" aria-label="Compliance note" style="flex:1; min-width:10rem">
+    </div>
+  </form>
+  {% endif %}
+{% else %}
+  <div class="card muted">No experiment is running. <a href="/experiments">Set one up</a>.</div>
+{% endif %}
+
+<h2>Tags · {{ "today" if tag_day == today else ("yesterday" if tag_day == yesterday else tag_day.strftime("%a %b %-d")) }}</h2>
+<div class="row">
+{% for key in tag_keys %}
+  <form method="post" action="/today/tags" class="inline">
+    <input type="hidden" name="day" value="{{ tag_day.isoformat() }}">
+    <button name="key" value="{{ key }}" class="{{ 'on' if key in tags }}" aria-pressed="{{ 'true' if key in tags else 'false' }}">{{ key.replace("_", " ") }}</button>
+  </form>
+{% endfor %}
+</div>
+<form method="post" action="/today/note">
+  <input type="hidden" name="day" value="{{ tag_day.isoformat() }}">
+  <div class="row" style="margin-top:8px">
+    <input name="note" value="{{ note }}" placeholder="Anything unusual?" aria-label="Day note" style="flex:1; min-width:10rem">
+    <button>Save</button>
+  </div>
+</form>
+<p class="small">
+  {% if previous_day %}<a href="/today?date={{ previous_day.isoformat() }}">← {{ previous_day.strftime("%a %-d") }}</a>{% endif %}
+  {% if next_day %} · <a href="/today?date={{ next_day.isoformat() }}">{{ next_day.strftime("%a %-d") }} →</a>{% endif %}
+</p>
+{% endblock %}

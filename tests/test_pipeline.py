@@ -51,6 +51,7 @@ async def test_primary_analysis_recovers_a_planted_effect(session_factory: Sessi
 
     treated = [v for d, v in outcomes.items() if arm_by_day.get(d) == "treatment"]
     control = [v for d, v in outcomes.items() if arm_by_day.get(d) == "control"]
+    assert primary.effect is not None
     assert primary.effect == pytest.approx(np.mean(treated) - np.mean(control), abs=1e-9)
     assert primary.effect == pytest.approx(0.30, abs=0.05)
     assert (primary.n_treatment, primary.n_control) == (14, 14)

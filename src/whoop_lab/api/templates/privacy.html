@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Privacy · whoop-lab{% endblock %}
+{# Public page: no links into the private app, no script behind the login. #}
+{% block nav %}{% endblock %}
+{% block scripts %}{% endblock %}
 {% block content %}
 <h1>Privacy policy</h1>
 <p class="muted">Last updated November 11, 2026</p>

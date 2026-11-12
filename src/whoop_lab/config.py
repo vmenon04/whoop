@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # Local hour at which a missing morning recovery triggers an alert.
     morning_alert_hour: int = Field(default=12, ge=0, le=23)
 
+    # Toggle tags offered on /today, comma-separated.
+    tag_keys: str = "alcohol,late_meal,late_caffeine,late_screens,sick,travel,hard_training"
+
     # Local hour from which tomorrow's arm may be assigned, and the hour of the daily analysis.
     assign_hour: int = Field(default=20, ge=0, le=23)
     analysis_hour: int = Field(default=13, ge=0, le=23)
@@ -116,6 +119,10 @@ class Settings(BaseSettings):
             host=self.postgres_host,
             port=self.postgres_port,
         )
+
+    @property
+    def tag_key_list(self) -> list[str]:
+        return [key.strip() for key in self.tag_keys.split(",") if key.strip()]
 
     @property
     def redirect_uri(self) -> str:

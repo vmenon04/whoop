@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ experiment.name }} · whoop-lab{% endblock %}
+{% block content %}
+<p class="small"><a href="/experiments">← Experiments</a></p>
+<h1>{{ experiment.name }} <span class="small {{ 'ok' if experiment.status == 'active' else 'muted' }}">{{ experiment.status }}</span></h1>
+
+<dl>
+  <dt>Hypothesis</dt><dd>{{ experiment.hypothesis }}</dd>
+  <dt>Treatment</dt><dd>{{ experiment.intervention }}</dd>
+  <dt>Control</dt><dd>{{ experiment.control }}</dd>
+  <dt>Primary outcome</dt><dd>{{ outcome.label if outcome else experiment.outcome_metric }}</dd>
+  <dt>Design</dt><dd>{{ experiment.planned_days }} assigned days · blocks of {{ experiment.block_size }}{% if experiment.washout_days %} · {{ experiment.washout_days }} washout days{% endif %}{% if experiment.stratify_weekend %} · weekday/weekend strata{% endif %}</dd>
+  {% if experiment.locked_at %}
+  <dt>Locked</dt><dd>{{ experiment.locked_at.astimezone(tz).strftime("%b %-d, %Y %H:%M") }} · first day {{ experiment.started_on.strftime("%b %-d") }}</dd>
+  {% endif %}
+</dl>
+
+{% if not experiment.locked_at %}
+<div class="row">
+  <form method="post" action="/experiments/{{ experiment.id }}/lock" class="inline" hx-confirm="Lock {{ experiment.name }}? The plan cannot be changed afterwards and the first arm is drawn tonight.">
+    <button class="primary">Lock and start</button>
+  </form>
+  <form method="post" action="/experiments/{{ experiment.id }}/delete" class="inline" hx-confirm="Delete this draft?">
+    <button class="danger">Delete draft</button>
+  </form>
+</div>
+{% endif %}
+
+<h2>Results</h2>
+{% if results %}
+  <p class="small muted">Computed {{ results[0].computed_at.astimezone(tz).strftime("%b %-d, %H:%M") }}. The experiment runs for its planned days whatever these numbers show.</p>
+  {% for r in results %}
+  <div class="card">
+    <div class="small {{ '' if r.primary else 'muted' }}"><strong>{{ r.outcome }}</strong> · {{ r.method }}</div>
+    {% if r.skipped %}<p class="small muted">Not computed: {{ r.skipped }}.</p>{% else %}<p>{{ r.sentence }}</p>{% endif %}
+    {% if r.caveat %}<p class="small muted">{{ r.caveat }}</p>{% endif %}
+  </div>
+  {% endfor %}
+{% elif experiment.locked_at %}
+  <p class="muted">No results yet. The first appear the afternoon after the first assigned day.</p>
+{% else %}
+  <p class="muted">Results appear once the experiment is locked and running.</p>
+{% endif %}
+
+{% if assignments %}
+<h2>Assignments so far</h2>
+<div class="scroll">
+<table>
+  <tr><th>Date</th><th>Arm</th><th>Followed</th><th>Note</th></tr>
+  {% for a in assignments %}
+  <tr><td>{{ a.local_date.strftime("%a %b %-d") }}</td><td>{{ a.arm }}</td><td>{{ "yes" if a.complied is true else ("no" if a.complied is false else "") }}</td><td>{{ a.note or "" }}</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endif %}
+
+<h2>Analysis plan</h2>
+<pre>{{ experiment.analysis_spec | tojson(indent=2) }}</pre>
+{% endblock %}
