@@ -221,7 +221,11 @@ async def connect(device: Any, connect_seconds: float) -> Any:
     from bleak import BleakClient
 
     client = BleakClient(device, timeout=connect_seconds)
-    await client.connect()
+    try:
+        await client.connect()
+    except Exception as exc:
+        say(f"Could not connect: {type(exc).__name__}: {exc}")
+        return None
     say("Connected")
     return client
 
@@ -277,9 +281,11 @@ async def stage_hr(args: argparse.Namespace) -> int:
     device = await find_band(args.timeout)
     if device is None:
         return 2
+    client = await connect(device, args.timeout)
+    if client is None:
+        return 3
     directory = new_capture_directory("hr")
     writer = CaptureWriter(directory)
-    client = await connect(device, args.timeout)
     try:
         write_json(directory / "gatt.json", describe_services(client))
         info = await read_device_information(client)
@@ -313,25 +319,48 @@ async def stage_hr(args: argparse.Namespace) -> int:
     return finish(directory)
 
 
+PAIRING_MODE = """\
+The data channels need a bond, and the band only accepts one in pairing mode.
+  1. Phone: WHOOP app force-quit, Bluetooth off.
+  2. Tap the band firmly and repeatedly until its light flashes blue.
+Press Enter as soon as it is flashing ..."""
+
+
 async def open_session(args: argparse.Namespace, stage: str) -> tuple[Any, Session, Path] | None:
-    device = await find_band(args.timeout)
-    if device is None:
-        return None
-    directory = new_capture_directory(stage)
-    writer = CaptureWriter(directory)
-    client = await connect(device, args.timeout)
-    session = Session(client, writer)
-    say("Subscribing to the data channels. Accept the pairing prompt if macOS shows one ...")
-    try:
-        await asyncio.wait_for(session.subscribe(), timeout=args.pair_timeout)
-    except Exception as exc:
-        say(f"Could not subscribe: {type(exc).__name__}: {exc}")
-        say(PAIRING_HELP)
-        await client.disconnect()
-        writer.close()
-        return None
-    write_json(directory / "gatt.json", describe_services(client))
-    return client, session, directory
+    """Scan, connect and subscribe, trying a few times: the band drops a connection
+    that asks for its data channels unless it is in pairing mode."""
+    if not args.no_prompt:
+        await asyncio.to_thread(input, PAIRING_MODE)
+    for attempt in range(1, args.attempts + 1):
+        say(f"Attempt {attempt} of {args.attempts}")
+        device = await find_band(args.timeout)
+        if device is None:
+            return None
+        client = await connect(device, args.timeout)
+        if client is None:
+            await asyncio.sleep(2)
+            continue
+        directory = new_capture_directory(stage)
+        writer = CaptureWriter(directory)
+        session = Session(client, writer)
+        say("Subscribing to the data channels. Accept the pairing prompt if macOS shows one ...")
+        try:
+            await asyncio.wait_for(session.subscribe(), timeout=args.pair_timeout)
+        except Exception as exc:
+            say(f"Could not subscribe: {type(exc).__name__}: {exc}")
+            writer.close()
+            writer.path.unlink(missing_ok=True)
+            directory.rmdir()
+            try:
+                await client.disconnect()
+            except Exception as disconnect_error:
+                say(f"  (already disconnected: {type(disconnect_error).__name__})")
+            await asyncio.sleep(2)
+            continue
+        write_json(directory / "gatt.json", describe_services(client))
+        return client, session, directory
+    say(PAIRING_HELP)
+    return None
 
 
 async def stage_status(args: argparse.Namespace) -> int:
@@ -462,6 +491,8 @@ def main() -> int:
     peek.add_argument("--burst-timeout", type=float, default=45.0)
     for stage in (status, peek):
         stage.add_argument("--pair-timeout", type=float, default=90.0)
+        stage.add_argument("--attempts", type=int, default=3)
+        stage.add_argument("--no-prompt", action="store_true", help="do not wait for Enter")
     report = stages.add_parser("report", help="summarise a saved capture")
     report.add_argument("directory")
 

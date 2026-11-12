@@ -7,7 +7,7 @@ description: Facts and hard safety rules for talking to the WHOOP 5.0 band direc
 
 The protocol is reverse-engineered by third parties. Nothing here comes from WHOOP. Every fact carries one of these labels:
 
-- **BAND**: confirmed on the owner's own band by this project. Nothing has this label yet.
+- **BAND**: confirmed on the owner's own band by this project (model 5.0, hardware `WG50_r45`, firmware 50.43.2.0), with the date.
 - **SOURCES AGREE**: at least two independent projects say the same thing.
 - **ONE SOURCE**: a single project, often a single band and firmware.
 - **DISPUTED**: the projects disagree. Never pick a side by guessing; show the owner.
@@ -33,7 +33,7 @@ When the band contradicts this file, the band wins: update the file and say so.
 - ONE SOURCE (wearable5.0, one band, firmware 50.43.2): an acknowledgement carrying an older position, sent during a transfer, moves trim back, so a drain can be undone and the app then uploads everything. Not allowed here until the owner decides.
 - DISPUTED: whether pairing a new central removes the phone's bond. wearable5.0 and noop say the WHOOP app must be re-paired; whoop-vault says not.
 
-## GATT (SOURCES AGREE)
+## GATT (BAND, 2026-11-12)
 
 | Role | UUID |
 |---|---|
@@ -43,9 +43,18 @@ When the band contradicts this file, the band wins: update the file and say so.
 | Events | `fd4b0004-…` |
 | Data | `fd4b0005-…` |
 | Memfault diagnostics | `fd4b0007-…` (not subscribed) |
-| Standard heart rate | `0x2A37`, readable without a bond |
+| Standard heart rate | `0x2A37`, notifies without a bond |
+| Device information | `0x2A29`, `2A24`, `2A25`, `2A26`, `2A27` readable without a bond; no `2A28` |
+| Battery | `0x2A19`, read and notify |
 
 A neighbouring service `11500001-6215-11ee-8c99-0242ac120002` belongs to the battery pack and uses different framing.
+
+## Observed on the band (BAND, 2026-11-12)
+
+- With the WHOOP app connected the band still advertises its name, but without the `fd4b0001` service. With the phone's Bluetooth off it advertises the service.
+- An unpaired connection works: device information reads, and `0x2A37` sends one notification a second.
+- R-R intervals on `0x2A37` are patchy. In a 120-second capture while awake, 27 of 120 notifications carried one (31 intervals, where about 140 beats occurred), in two runs. The unpaired stream alone is not enough for HRV; whether it is complete during sleep is untested.
+- Subscribing to the `fd4b` channels without a bond makes the band drop the connection (bleak reports `disconnected`), and the next connection attempt can fail during service discovery. The band has to be in pairing mode: tap it until it flashes blue.
 
 ## Frame (SOURCES AGREE)
 
