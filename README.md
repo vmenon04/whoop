@@ -14,7 +14,7 @@ A self-hosted service that keeps a complete copy of your WHOOP data in Postgres 
 | `migrate` | Runs `alembic upgrade head` once on every `up`, then exits. |
 | `grafana` | Starts empty for now, served under `/grafana`. |
 
-`api` and `grafana` are published on `127.0.0.1` only. The tunnel is the only way in.
+`api` and `grafana` are published on `127.0.0.1` only (ports 8000 and 3001 by default; `API_PORT` and `GRAFANA_PORT` in `.env` change them). The tunnel is the only way in.
 
 ## Setup
 
@@ -36,7 +36,7 @@ Locally managed tunnel (`config.yml`):
 ingress:
   - hostname: whoop.vasumenon.com
     path: ^/grafana(/.*)?$
-    service: http://localhost:3000
+    service: http://localhost:3001
   - hostname: whoop.vasumenon.com
     service: http://localhost:8000
   - service: http_status:404
@@ -44,7 +44,7 @@ ingress:
 
 Then `cloudflared tunnel route dns <tunnel-name> whoop.vasumenon.com` and restart cloudflared.
 
-Dashboard-managed tunnel: add two public hostnames for `whoop.vasumenon.com`, the first with path `^/grafana(/.*)?$` to `http://localhost:3000`, the second with no path to `http://localhost:8000`.
+Dashboard-managed tunnel: add two public hostnames for `whoop.vasumenon.com`, the first with path `^/grafana(/.*)?$` to `http://localhost:3001`, the second with no path to `http://localhost:8000`.
 
 If you would rather have this stack run its own connector, set `CLOUDFLARE_TUNNEL_TOKEN` and start with `--profile cloudflared`; the services are then `http://api:8000` and `http://grafana:3000`.
 
