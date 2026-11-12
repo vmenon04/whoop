@@ -49,6 +49,9 @@ async def session_factory(engine: AsyncEngine) -> SessionFactory:
     tables = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
     async with engine.begin() as conn:
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        await conn.execute(
+            text("INSERT INTO app_config (id, local_timezone) VALUES (1, 'America/New_York')")
+        )
     return make_session_factory(engine)
 
 
