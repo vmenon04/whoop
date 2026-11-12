@@ -11,6 +11,8 @@ experiment-analysis skill; tests/test_inference.py checks the two agree.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import combinations
+from math import comb
 from typing import Any
 
 import numpy as np
@@ -67,9 +69,33 @@ class BlockDesign:
         )
         return cls(blocks, np.array(block_position, dtype=np.int64), block_size)
 
+    @property
+    def n_blocks(self) -> int:
+        return int(self.block_of_day.max()) + 1 if self.n_days else 0
+
+    @property
+    def n_assignments(self) -> int:
+        """How many equally likely ways the blocks could have been permuted."""
+        return int(comb(self.block_size, self.block_size // 2) ** self.n_blocks)
+
+    def enumerate(self) -> NDArray[np.int8]:
+        """Every possible assignment vector, one row per way of permuting the blocks.
+
+        Rows are equally likely. A block with unused positions contributes repeated
+        rows, which is what gives its days the right probabilities.
+        """
+        half = self.block_size // 2
+        patterns = np.zeros((comb(self.block_size, half), self.block_size), dtype=np.int8)
+        for row, treated in enumerate(combinations(range(self.block_size), half)):
+            patterns[row, list(treated)] = 1
+        choice = np.indices((len(patterns),) * self.n_blocks).reshape(self.n_blocks, -1).T
+        blocks = patterns[choice]  # (assignments, blocks, block_size)
+        result: NDArray[np.int8] = blocks[:, self.block_of_day, self.position]
+        return result
+
     def draw(self, rng: np.random.Generator, draws: int) -> NDArray[np.int8]:
         """`draws` assignment vectors (rows) from the permuted-block scheme. 1 = treatment."""
-        n_blocks = int(self.block_of_day.max()) + 1 if self.n_days else 0
+        n_blocks = self.n_blocks
         half = self.block_size // 2
         base = np.array([1] * half + [0] * half, dtype=np.int8)
         blocks = np.broadcast_to(base, (draws, n_blocks, self.block_size)).copy()
@@ -104,7 +130,8 @@ class TestResult:
     ci_high: float | None
     n_treatment: int
     n_control: int
-    draws: int
+    draws: int  # assignments compared against: random re-draws, or all of them if `exact`
+    exact: bool
 
     __test__ = False  # not a pytest class
 
@@ -115,6 +142,10 @@ class RandomizationTest:
     y: outcome per analysed day, NaN where missing. arm: 1 treatment, 0 control.
     Missing days stay in the assignment vector and are masked after each draw,
     so the re-draws see the same missingness pattern as the real experiment.
+
+    A design with no more possible assignments than `draws` is enumerated in full
+    and its p-value is exact. Sampling such a design could report a p-value below
+    the smallest one it can actually produce.
     """
 
     def __init__(
@@ -133,6 +164,7 @@ class RandomizationTest:
         if not np.isin(self.arm, (0, 1)).all():
             raise ValueError("arm must be 0 or 1")
         self.draws = draws
+        self.exact = design.n_assignments <= draws
         self.ok = ~np.isnan(self.y)
         self.n_treatment = int((self.ok & (self.arm == 1)).sum())
         self.n_control = int((self.ok & (self.arm == 0)).sum())
@@ -143,7 +175,9 @@ class RandomizationTest:
             return
 
         self.observed = float(_difference_in_means(self.arm[None, :], self.y, self.ok)[0])
-        redraws = design.draw(np.random.default_rng(seed), draws)
+        redraws = (
+            design.enumerate() if self.exact else design.draw(np.random.default_rng(seed), draws)
+        )
         # Under H0: effect == tau, a re-drawn assignment `a` would have produced the statistic
         #   stat_a(y - tau * arm) + tau  =  stat_a(y) - tau * stat_a(arm) + tau,
         # so two vectors are enough to evaluate any tau without re-drawing.
@@ -158,6 +192,9 @@ class RandomizationTest:
             return None
         centred = self._sim_y - tau * self._sim_arm
         extreme = np.abs(centred) >= abs(self.observed - tau) - _TIE_TOLERANCE
+        if self.exact:
+            # Every assignment is counted once, the observed one among them.
+            return float(extreme.sum() / len(centred))
         return float((1 + extreme.sum()) / (1 + len(centred)))
 
     def _bound(self, direction: float, alpha: float) -> float | None:
@@ -201,4 +238,5 @@ class RandomizationTest:
             n_treatment=self.n_treatment,
             n_control=self.n_control,
             draws=len(self._sim_y),
+            exact=self.exact,
         )

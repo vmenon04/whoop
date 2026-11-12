@@ -163,6 +163,7 @@ def _itt(
         details={
             "alpha": alpha,
             "draws": result.draws,
+            "exact": result.exact,
             "seed": seed,
             "days_due": n_due,
             "missing_fraction": round(missing_fraction, 4),

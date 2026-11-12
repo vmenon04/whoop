@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import permutations, product
 from typing import Any
 
 import numpy as np
@@ -189,3 +190,99 @@ def test_too_few_days_to_reject_gives_an_open_interval() -> None:
     assert result.p_value > 0.05
     assert result.ci_low is None
     assert result.ci_high is None
+
+
+# --- small designs are enumerated exactly -------------------------------------------------
+
+
+def brute_force_p(y: Any, arm: Any, blocks: list[list[int]]) -> float:
+    """Exact p-value written the slow, obvious way: every permutation of every block,
+    with missing days masked after the assignment is formed."""
+    ok = ~np.isnan(y)
+
+    def stat(a: Any) -> float | None:
+        t, c = ok & (a == 1), ok & (a == 0)
+        return float(y[t].mean() - y[c].mean()) if t.any() and c.any() else None
+
+    observed = stat(arm)
+    assert observed is not None
+    per_block = [
+        sorted(set(permutations([1] * (len(b) // 2) + [0] * (len(b) // 2)))) for b in blocks
+    ]
+    stats = []
+    for choice in product(*per_block):
+        candidate = np.zeros(len(y), dtype=int)
+        for days, pattern in zip(blocks, choice, strict=True):
+            candidate[days] = pattern
+        value = stat(candidate)
+        if value is not None:
+            stats.append(value)
+    return float(np.mean(np.abs(stats) >= abs(observed) - 1e-12))
+
+
+def test_small_designs_are_enumerated_in_full() -> None:
+    design = BlockDesign.contiguous(8, 4)
+    assert design.n_assignments == 36
+    rows = design.enumerate()
+    assert rows.shape == (36, 8)
+    assert len({tuple(row) for row in rows.tolist()}) == 36
+    assert (rows.reshape(36, 2, 4).sum(axis=2) == 2).all()
+    # A cut-off block keeps the probabilities of a full one.
+    tail = BlockDesign.contiguous(6, 4).enumerate()[:, 4:].sum(axis=1)
+    assert (np.bincount(tail, minlength=3) / 36).tolist() == [1 / 6, 4 / 6, 1 / 6]
+
+
+def test_exact_p_value_masks_missing_days_instead_of_reblocking() -> None:
+    y = np.array([0.1, 1.9, np.nan, 0.4, 2.2, np.nan, 0.3, 1.6])
+    arm = np.array([0, 1, 1, 0, 1, 0, 0, 1])
+    test = RandomizationTest(y, arm, BlockDesign.contiguous(8, 4), draws=10_000, seed=0)
+    assert test.exact
+    masked = brute_force_p(y, arm, [[0, 1, 2, 3], [4, 5, 6, 7]])
+    assert test.p_value() == pytest.approx(masked, abs=1e-12)
+    # The wrong analysis drops the missing days first and treats what is left as new blocks.
+    keep = ~np.isnan(y)
+    reblocked = brute_force_p(y[keep], arm[keep], [[0, 1, 2, 3], [4, 5]])
+    assert abs(masked - reblocked) > 0.01
+    # A non-zero null goes through the same enumeration.
+    shifted = brute_force_p(y - 0.7 * arm, arm, [[0, 1, 2, 3], [4, 5, 6, 7]])
+    assert test.p_value(0.7) == pytest.approx(shifted, abs=1e-12)
+
+
+def test_stratified_exact_p_value_matches_brute_force() -> None:
+    strata = [
+        "weekday",
+        "weekday",
+        "weekend",
+        "weekend",
+        "weekday",
+        "weekday",
+        "weekend",
+        "weekend",
+    ]
+    position = [0, 1, 0, 1, 2, 3, 2, 3]
+    design = BlockDesign.from_assignments(strata, [0] * 8, position, 4)
+    y = np.array([1.0, 2.5, 0.2, 1.1, 0.9, 3.0, np.nan, 0.8])
+    arm = np.array([0, 1, 0, 1, 0, 1, 1, 0])
+    test = RandomizationTest(y, arm, design, draws=10_000, seed=0)
+    expected = brute_force_p(y, arm, [[0, 1, 4, 5], [2, 3, 6, 7]])
+    assert test.p_value() == pytest.approx(expected, abs=1e-12)
+
+
+def test_a_tiny_design_never_reports_a_p_value_it_cannot_produce() -> None:
+    # Eight days: 36 assignments, and the mirror image of the observed one is as
+    # extreme, so no p-value can be below 2/36, whatever the data or the seed.
+    y = np.array([0.0, 0.0, 9.0, 9.0, 0.0, 0.0, 9.0, 9.0])
+    arm = np.array([0, 0, 1, 1, 0, 0, 1, 1])
+    for seed in range(20):
+        result = RandomizationTest(y, arm, BlockDesign.contiguous(8, 4), seed=seed).result()
+        assert result.exact
+        assert result.draws == 36
+        assert result.p_value == pytest.approx(2 / 36)
+        assert (result.ci_low, result.ci_high) == (None, None)
+
+
+def test_larger_designs_are_sampled() -> None:
+    sim = simulate_experiment(np.random.default_rng(1), n_days=28)
+    result = RandomizationTest(sim.y, sim.arm, sim.design, draws=2000, seed=0).result()
+    assert not result.exact
+    assert result.draws == 2000
