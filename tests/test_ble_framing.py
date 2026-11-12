@@ -27,11 +27,13 @@ from whoop_lab.ble.commands import (
     build_allowed,
     build_history_ack,
     build_trim_restore,
+    build_trim_rewind,
     metadata_type,
     parse_data_range,
     parse_hello,
     parse_record_header,
     parse_response,
+    rewind_page,
 )
 from whoop_lab.ble.framing import (
     FrameError,
@@ -213,6 +215,29 @@ def test_restore_names_the_trim_page_and_wrap_the_band_reported() -> None:
 def test_restore_refuses_a_range_it_cannot_trust(unusable: DataRange) -> None:
     with pytest.raises(CommandNotAllowedError):
         build_trim_restore(unusable, sequence=1)
+
+
+def test_rewind_goes_back_from_the_write_head_and_stops_at_what_the_band_holds() -> None:
+    fresh = DataRange(5229, 5229, 5229, 0, 131072, 0, 0)  # ring not yet wrapped, all synced
+    assert rewind_page(fresh, 3640) == (1589, 0)
+    assert rewind_page(fresh, 99999) == (0, 0)  # nothing exists before page 0
+    frame = build_trim_rewind(fresh, 3640, sequence=6)
+    check_frame(frame)
+    assert frame[8:12] == bytes([35, 6, 23, 1])
+    assert struct.unpack_from("<II", frame, 12) == (1589, 0)
+
+    wrapped = DataRange(0, 500, 500, 4, 131072, 0, 0)
+    assert rewind_page(wrapped, 2000) == (131072 - 1500, 3)  # behind the head: previous pass
+    assert rewind_page(wrapped, 300) == (200, 4)
+    assert rewind_page(wrapped, 10**9) == ((500 - (131072 - 1024)) % 131072, 3)
+
+
+def test_rewind_refuses_a_position_that_is_not_older_than_trim() -> None:
+    unsynced = DataRange(0, 5229, 5143, 0, 131072, 0, 0)  # 86 pages not yet synced
+    for pages_back in (0, -5, 50, 86):
+        with pytest.raises(CommandNotAllowedError):
+            rewind_page(unsynced, pages_back)
+    assert rewind_page(unsynced, 87) == (5142, 0)
 
 
 def test_no_list_overlaps_another() -> None:

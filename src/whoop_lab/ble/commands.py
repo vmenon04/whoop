@@ -229,6 +229,46 @@ def build_trim_restore(original: DataRange, sequence: int) -> bytes:
     )
 
 
+# Never rewind into the part of a wrapped ring that is about to be overwritten.
+_REWIND_MARGIN_PAGES = 1024
+
+
+def rewind_page(current: DataRange, pages_back: int) -> tuple[int, int]:
+    """The (page, wrap) that lies `pages_back` pages behind the write head, clamped to
+    history the band still holds. Raises if that is not older than trim."""
+    total = current.total_pages
+    if not total or pages_back <= 0:
+        raise CommandNotAllowedError("nothing to rewind to")
+    # On the first pass of the ring only pages 0..write exist.
+    first_pass = current.write_wrap == 0
+    held = current.write_page if first_pass else total - _REWIND_MARGIN_PAGES
+    back = min(pages_back, held)
+    behind = current.pages_behind or 0
+    if back <= behind:
+        raise CommandNotAllowedError("that is not older than the current sync position")
+    page = (current.write_page - back) % total
+    wrap = current.write_wrap if page <= current.write_page else current.write_wrap - 1
+    return page, wrap
+
+
+def build_trim_rewind(current: DataRange, pages_back: int, sequence: int) -> bytes:
+    """Move trim BACK so the band serves history it has already given to the WHOOP app.
+
+    The band keeps trimmed pages on flash until the ring overwrites them, so this
+    re-reads old nights without taking anything from the app, provided trim is put
+    back afterwards with build_trim_restore. Same mechanism and evidence as the
+    restore. Always follow it with a restore to the range read before rewinding.
+
+    Status: the owner approved the restore, but has not explicitly approved this
+    rewind. `ble_spike.py drain --reread-hours` explains it and asks before sending.
+    """
+    page, wrap = rewind_page(current, pages_back)
+    return build_frame(
+        bytes([PACKET_COMMAND, sequence & 0xFF, HISTORICAL_DATA_RESULT, 0x01])
+        + struct.pack("<II", page, wrap)
+    )
+
+
 def parse_data_range(body: bytes) -> DataRange | None:
     """The final (SUCCESS) GET_DATA_RANGE body. None if it is the short PENDING reply."""
     if len(body) < 65:
