@@ -48,18 +48,26 @@ def build_scheduler(ctx: WorkerContext) -> AsyncIOScheduler:
         next_run_time=now,
         id="refresh_token",
     )
+    scheduler.add_job(
+        _guarded(jobs.process_events_job, ctx),
+        "interval",
+        seconds=settings.event_poll_seconds,
+        id="process_events",
+    )
     return scheduler
 
 
 async def run(settings: Settings) -> None:
     configure_logging(settings.log_level)
+    # One line per job run every few seconds is noise; keep warnings and errors.
+    logging.getLogger("apscheduler.executors").setLevel(logging.WARNING)
     engine = make_engine(settings.database_url)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
     async with httpx.AsyncClient(timeout=30.0) as http:
-        ctx = WorkerContext(settings, make_session_factory(engine), http)
+        ctx = WorkerContext.create(settings, make_session_factory(engine), http)
         scheduler = build_scheduler(ctx)
         scheduler.start()
         log.info("worker started with jobs: %s", [job.id for job in scheduler.get_jobs()])
