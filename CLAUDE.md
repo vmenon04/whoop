@@ -55,7 +55,7 @@ Run ruff, mypy and pytest before every commit. Small commits, one concern each, 
 The `experiment-analysis` skill is the authority; these are where its rules live in code.
 
 - `experiments/service.py` is the only writer of `experiments` and `assignments`. Triggers in migration 0004 enforce the same rules: a locked experiment changes only in `status`, assignments change only in `complied` and `note`, `experiment_results` is append-only. `TRUNCATE` bypasses row triggers; only tests use it.
-- Locking sets `started_on` to tomorrow. `planned_days` counts assigned days; washout days get no row and do not count. A missed evening leaves a gap that is never filled in.
+- Locking sets `started_on` to tomorrow. `planned_days` counts assigned days; every assigned day (either arm) is followed by `washout_days` days with no row, which do not count. A missed evening leaves a gap that is never filled in.
 - Tomorrow's arm is drawn by `experiments/jobs.py:assign_tomorrow`, never before `ASSIGN_HOUR`. No page or query shows anything beyond the rows that exist.
 - Each block gets a fresh seed stored on its rows; `randomize.arm_for(seed, block_size, position)` reproduces any arm.
 - `analysis/inference.py` is the vectorised randomization test. `tests/test_inference.py` holds the skill's reference implementation verbatim and checks the two agree. `BlockDesign.from_assignments` rebuilds blocks from stored `stratum`, `block_index`, `block_position`, never from dates.

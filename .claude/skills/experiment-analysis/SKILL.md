@@ -31,7 +31,7 @@ This code produces causal claims from about 30 data points. A bug here does not 
 - Permuted blocks. Default block size 4, two per arm.
 - Each block has its own stored seed. The sequence for a block is a function of that seed only.
 - Optional stratification by weekday versus weekend: separate block streams per stratum.
-- Washout days after a treatment day get no assignment row and are excluded from analysis.
+- Every assigned day, treatment or control, is followed by `washout_days` days that get no assignment row and are excluded from analysis. The gap must not depend on the arm: if it followed treatment days only, the dates assigned would depend on the arms drawn, and the test (which re-draws arms over the observed dates) would be biased under any time trend.
 - Tomorrow's arm is assigned the evening before and never earlier than that. Future assignments are not visible in the UI.
 
 ## Primary analysis

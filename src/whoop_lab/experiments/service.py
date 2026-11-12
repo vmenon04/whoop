@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whoop_lab.experiments.outcomes import OUTCOMES, default_analysis_spec
 from whoop_lab.experiments.randomize import arm_for, stratum_for
 from whoop_lab.models.experiments import (
-    ARM_TREATMENT,
     STATUS_ACTIVE,
     STATUS_COMPLETED,
     STATUS_DRAFT,
@@ -193,7 +192,8 @@ async def assign_day(
 
     Returns (existing, False) if the day is already assigned: an assignment is
     never redrawn. Returns (None, False) when the day gets no assignment: before
-    the start, after planned_days are used up, or inside a washout window.
+    the start, after planned_days are used up, or within washout_days of the
+    previous assigned day.
     """
     experiment = await _get_for_update(session, experiment_id)  # serialises concurrent callers
     if experiment.status != STATUS_ACTIVE or experiment.started_on is None:
@@ -210,19 +210,11 @@ async def assign_day(
     )
     if latest is not None and day <= latest:
         return None, False  # never fill in a day that was skipped
-    if experiment.washout_days > 0:
-        recent_treatment = await session.scalar(
-            select(Assignment.id)
-            .where(
-                Assignment.experiment_id == experiment_id,
-                Assignment.arm == ARM_TREATMENT,
-                Assignment.local_date >= day - timedelta(days=experiment.washout_days),
-                Assignment.local_date < day,
-            )
-            .limit(1)
-        )
-        if recent_treatment is not None:
-            return None, False
+    # Every assigned day is followed by the washout gap, whatever its arm. If the gap
+    # followed treatment days only, the calendar would depend on the arms drawn, and
+    # re-drawing arms over the observed dates would no longer mirror the design.
+    if latest is not None and day <= latest + timedelta(days=experiment.washout_days):
+        return None, False
 
     stratum = stratum_for(day, stratify_weekend=experiment.stratify_weekend)
     last = (

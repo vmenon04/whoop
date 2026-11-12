@@ -250,18 +250,26 @@ async def test_a_skipped_day_is_never_filled_in_later(session_factory: SessionFa
     assert [r.block_position for r in rows] == [0, 1]  # block positions stay contiguous
 
 
-async def test_washout_days_after_treatment_get_no_assignment(
+async def test_washout_restarts_after_a_missed_evening(session_factory: SessionFactory) -> None:
+    experiment_id = await make_locked(session_factory, planned_days=12, washout_days=2)
+    for offset in (0, 1, 2, 4, 5, 6, 7):  # the evening for day 3 was missed
+        async with session_factory() as session, session.begin():
+            await service.assign_day(session, experiment_id, START + timedelta(days=offset))
+    rows = await assignments(session_factory, experiment_id)
+    assert [(r.local_date - START).days for r in rows] == [0, 4, 7]
+
+
+async def test_washout_follows_every_assigned_day_whatever_its_arm(
     session_factory: SessionFactory,
 ) -> None:
     experiment_id = await make_locked(session_factory, planned_days=12, washout_days=2)
     await assign_range(session_factory, experiment_id, 60)
     rows = await assignments(session_factory, experiment_id)
     assert len(rows) == 12
-    by_date = {r.local_date: r.arm for r in rows}
-    for day, arm in by_date.items():
-        if arm == "treatment":
-            assert day + timedelta(days=1) not in by_date
-            assert day + timedelta(days=2) not in by_date
+    assert {r.arm for r in rows} == {"treatment", "control"}
+    # The calendar is fixed by the design alone: one assigned day in every three,
+    # so the dates carry no information about the arms.
+    assert [r.local_date for r in rows] == [START + timedelta(days=3 * i) for i in range(12)]
     # Blocks are still complete and balanced even though the dates have gaps.
     blocks: dict[int, list[str]] = defaultdict(list)
     for row in rows:
