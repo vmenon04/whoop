@@ -8,14 +8,11 @@ description: Verified facts and hard rules for the WHOOP v2 developer API. Use w
 Facts below marked VERIFIED were checked against developer.whoop.com on 2026-11-11.
 Facts marked UNVERIFIED are from memory. Confirm them in the OpenAPI spec before relying on them, then update this file.
 
-## First time in this repo
+## Spec
 
-1. Fetch the OpenAPI spec linked from https://developer.whoop.com/api.
-2. Save it to `.claude/skills/whoop-api/reference/openapi.json`.
-3. Resolve every UNVERIFIED item below against it and edit this file.
-4. Generate pydantic models from the spec. Do not hand-type field names.
+The OpenAPI spec is saved at `reference/openapi.json` (fetched 2026-11-11 from `https://api.prod.whoop.com/developer/doc/openapi.json`). Read it instead of fetching the docs again. Pydantic models are generated from it into `src/whoop_lab/whoop/generated.py` with `./scripts/gen_models.sh`. Do not hand-type field names.
 
-After that, read `reference/openapi.json` instead of fetching the docs again.
+To refresh: download the spec again, replace the file, run the script, then fix whatever the tests flag.
 
 ## OAuth (VERIFIED)
 
@@ -48,7 +45,8 @@ Scopes to request: `offline read:recovery read:cycles read:sleep read:workout re
 - There is no "created" event. New records arrive as `.updated`, and the same record is updated again when rescored.
 - WHOOP retries a failed delivery 5 times over about an hour. Failure means non-2XX or a timeout.
 - Respond 2XX within about one second.
-- Cycles, day strain and body measurements have no webhook (reported by third parties, treat as true until the docs say otherwise). Poll them.
+- Cycles, day strain and body measurements have no webhook (stated on WHOOP's webhook page). Poll them.
+- WHOOP's own docs say webhooks can be missed and recommend a reconciliation job.
 
 ### Signature
 
@@ -88,15 +86,22 @@ No WHOOP API call, no token access and no business logic in the request path.
 - Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` (seconds).
 - On 429, sleep for `X-RateLimit-Reset` seconds plus jitter, then retry. The backfill is the only job likely to hit this.
 
-## Endpoints and fields (UNVERIFIED)
+## Endpoints and fields (VERIFIED against the spec)
 
-- Base URL: `https://api.prod.whoop.com/developer/v2`
-- Collections: cycle, recovery, activity/sleep, activity/workout. Profile and body measurement under user/.
-- Collection parameters: `limit` (max 25), `start`, `end`, `nextToken`. Responses carry `records` and `next_token`.
-- Score objects carry `score_state`: `SCORED`, `PENDING_SCORE` or `UNSCORABLE`.
-- Recovery score: `recovery_score`, `hrv_rmssd_milli`, `resting_heart_rate`, `spo2_percentage`, `skin_temp_celsius`, `user_calibrating`.
-- Sleep has a `nap` boolean and a stage summary in milliseconds.
-- Timestamps are ISO 8601 UTC with a separate `timezone_offset`.
+- Base URL: `https://api.prod.whoop.com/developer`, paths under `/v2`.
+- Collections: `/v2/cycle`, `/v2/recovery`, `/v2/activity/sleep`, `/v2/activity/workout`. Single records: `/v2/cycle/{cycleId}`, `/v2/activity/sleep/{sleepId}`, `/v2/activity/workout/{workoutId}`. Profile: `/v2/user/profile/basic`. Body: `/v2/user/measurement/body`. Revoke: `DELETE /v2/user/access`.
+- **There is no recovery-by-sleep endpoint.** The only single-recovery call is `GET /v2/cycle/{cycleId}/recovery`. For a recovery webhook: fetch the sleep, read its `cycle_id`, fetch the cycle's recovery.
+- Recovery has no ID of its own: `cycle_id`, `sleep_id` (UUID), `user_id`, `created_at`, `updated_at`, `score_state`, `score`.
+- Collection parameters: `limit` (max 25, default 10), `start` (inclusive), `end` (exclusive, defaults to now), `nextToken`. Responses carry `records` and `next_token`. Sorted by start time descending (recoveries by the start of their sleep).
+- `score_state`: `SCORED`, `PENDING_SCORE` or `UNSCORABLE`. The `score` object is absent unless `SCORED`.
+- Recovery score: `user_calibrating`, `recovery_score`, `resting_heart_rate`, `hrv_rmssd_milli` are required when scored; `spo2_percentage` and `skin_temp_celsius` are optional (4.0 hardware and later).
+- Sleep: `nap` boolean, `cycle_id`, `score.stage_summary` (durations in ms), `score.sleep_needed`, and four optional percentages/rates.
+- Cycle: `end` is absent while the cycle is open. `step_count` is nullable.
+- Workout: `sport_name`. `sport_id` and every `v1_id` are deprecated ("will not exist past 09/01/2025"); do not add columns for them.
+- Timestamps are ISO 8601 with a separate `timezone_offset` string such as `-05:00`.
+- `X-RateLimit-Limit` is compound, e.g. `100, 100;window=60, 10000;window=86400`. Use `X-RateLimit-Remaining` and `X-RateLimit-Reset` and do not parse `Limit`.
+- The OAuth page does not state how the client authenticates at the token URL; its sample sends `client_id` and `client_secret` in the body. This codebase sends them form-encoded. UNVERIFIED until the first live sign-in succeeds.
+- The 5-minute webhook timestamp window is this project's rule. WHOOP documents no tolerance.
 
 ## Ingestion rules for this codebase
 
