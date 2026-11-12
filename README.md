@@ -6,7 +6,7 @@ A self-hosted service that keeps a complete copy of your WHOOP data in Postgres 
 
 | Service | What it does |
 | --- | --- |
-| `api` | `/today`, `/experiments`, status page, OAuth start/callback, webhook receiver, `/healthz`. Never calls WHOOP except for the one-time code exchange. |
+| `api` | `/today`, `/experiments`, status page, OAuth start/callback, webhook receiver, `/healthz`, `/uptime`. Never calls WHOOP except for the one-time code exchange. |
 | `worker` | Refreshes the token, processes webhook events, polls cycles and reconciles the last 7 days every 3 hours. Draws tomorrow's arm each evening, alerts on a missing morning recovery at noon, and appends results at 13:00. |
 | `db` | Postgres 16. All state, and the job queue. |
 | `migrate` | Runs `alembic upgrade head` and `whoop-lab setup-db` (timezone, Grafana's read-only role) on every `up`, then exits. |
@@ -129,6 +129,11 @@ docker compose exec worker whoop-lab simulate
 | Queue state | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB" -c "select status, count(*) from webhook_events group by 1"'` |
 
 **If WHOOP rejects a token refresh** the worker stops calling WHOOP, the status page shows **Reconnect WHOOP**, and if `NTFY_URL` is set you get one notification. Sign in again from the status page. Missed data is picked up by the next reconcile (it looks back 7 days; for a longer outage run `whoop-lab backfill --since <date>`).
+
+**Uptime monitoring.** `GET /uptime` answers 200 with `{"status": "ok"}` only while the database answers, the WHOOP token is usable and the worker has finished a sync without error in the last two reconcile intervals (6.5 hours by default). Otherwise it answers 503 and names the failing check (`database`, `token` or `sync`). It returns no data. `/healthz` is the lighter check: the api process and the database only.
+
+- A monitor on the server or LAN (Uptime Kuma, for example) can call `http://127.0.0.1:8000/uptime` directly.
+- A monitor outside goes through Cloudflare Access. Create a service token in Zero Trust, add a **Service Auth** policy for it on an application scoped to `whoop.vasumenon.com/uptime`, and have the monitor send the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Prefer this to a Bypass policy: the endpoint reads the database, and a bypass would also tell anyone whether the service is healthy.
 
 **Notifications** are optional. Set `NTFY_URL` to a full topic URL, either `https://ntfy.sh/<long-random-topic>` or a self-hosted ntfy (`--profile ntfy` starts one on `127.0.0.1:8080`).
 
