@@ -57,7 +57,8 @@ class Settings(BaseSettings):
     tag_keys: str = "alcohol,late_meal,late_caffeine,late_screens,sick,travel,hard_training"
 
     # Local hour from which tomorrow's arm may be assigned, and the hour of the daily analysis.
-    assign_hour: int = Field(default=20, ge=0, le=23)
+    # Noon at the earliest: the arm for tomorrow must not exist before the evening before.
+    assign_hour: int = Field(default=20, ge=12, le=23)
     analysis_hour: int = Field(default=13, ge=0, le=23)
 
     # Token refresh: check often, refresh only when little life remains.

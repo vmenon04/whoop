@@ -33,6 +33,13 @@ def test_unknown_timezone_is_rejected() -> None:
         make(local_timezone="Mars/Olympus")
 
 
+@pytest.mark.parametrize("hour", [0, 6, 11, 24])
+def test_assignment_hour_must_be_in_the_second_half_of_the_day(hour: int) -> None:
+    with pytest.raises(ValidationError):
+        make(assign_hour=hour)
+    assert make(assign_hour=12).assign_hour == 12
+
+
 NASTY = "p@ss:w/rd#1?x%y&z=$ 'q\""
 
 
