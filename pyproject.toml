@@ -36,7 +36,7 @@ packages = ["src/whoop_lab"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = [".claude", "src/whoop_lab/whoop/generated.py"]
+extend-exclude = [".claude", "src/whoop_lab/whoop/generated.py", "src/whoop_lab/ble/vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S", "RUF", "DTZ", "PT"]
@@ -52,6 +52,7 @@ ignore = ["S101", "S105"]
 python_version = "3.12"
 strict = true
 files = ["src", "tests"]
+exclude = ["src/whoop_lab/ble/vendor/"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
@@ -59,7 +60,7 @@ module = ["apscheduler.*", "testcontainers.*", "statsmodels.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["whoop_lab.whoop.generated"]
+module = ["whoop_lab.whoop.generated", "whoop_lab.ble.vendor.*"]
 ignore_errors = true
 
 [tool.pytest.ini_options]
