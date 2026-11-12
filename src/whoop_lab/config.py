@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     ntfy_url: str | None = Field(default=None, description="Full topic URL, e.g. https://ntfy.sh/x")
     ntfy_token: SecretStr | None = None
 
+    # Password for the read-only `grafana_ro` database role. Unset: the role is not created.
+    grafana_db_password: SecretStr | None = None
+
+    # Local hour at which a missing morning recovery triggers an alert.
+    morning_alert_hour: int = Field(default=12, ge=0, le=23)
+
     # Token refresh: check often, refresh only when little life remains.
     token_refresh_check_seconds: int = 300
     token_refresh_threshold_seconds: int = 1200
@@ -78,7 +84,7 @@ class Settings(BaseSettings):
             raise ValueError(f"unknown timezone: {value}") from exc
         return value
 
-    @field_validator("ntfy_url", mode="before")
+    @field_validator("ntfy_url", "ntfy_token", "grafana_db_password", "database_url", mode="before")
     @classmethod
     def _empty_is_none(cls, value: object) -> object:
         return None if value == "" else value

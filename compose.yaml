@@ -16,6 +16,7 @@ x-app: &app
     NTFY_URL: ${NTFY_URL:-}
     NTFY_TOKEN: ${NTFY_TOKEN:-}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-}
 
 services:
   db:
@@ -39,7 +40,7 @@ services:
     # the result; three parallel builds of the same tag can collide.
     build: .
     restart: "no"
-    command: ["alembic", "upgrade", "head"]
+    command: ["sh", "-c", "alembic upgrade head && whoop-lab setup-db"]
     depends_on:
       db:
         condition: service_healthy
@@ -74,13 +75,22 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # Cloudflare Access is the login. Everyone who gets this far may view; editing
+      # still needs the admin password.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/data-health.json
+      WHOOP_DB_NAME: ${POSTGRES_DB}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-}
     volumes:
       - grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   # Optional: only if this stack should run its own tunnel connector.
   cloudflared:

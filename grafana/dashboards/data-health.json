@@ -1,0 +1,554 @@
+{
+  "uid": "whoop-data-health",
+  "title": "Data health",
+  "tags": [
+    "whoop-lab"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": false,
+  "refresh": "5m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Hours since last scored recovery",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT extract(epoch FROM now() - max(outcome_sleep_end)) / 3600 FROM daily_outcomes WHERE outcome_scored",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 30,
+                "color": "orange"
+              },
+              {
+                "value": 40,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 1,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Hours since last clean sync",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT extract(epoch FROM now() - max(finished_at)) / 3600 FROM sync_runs WHERE error IS NULL AND finished_at IS NOT NULL",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 4,
+                "color": "orange"
+              },
+              {
+                "value": 8,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Webhook events waiting",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT count(*) FROM webhook_events WHERE status = 'pending'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              },
+              {
+                "value": 5,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Webhook events failed",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT count(*) FROM webhook_events WHERE status = 'failed'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Mornings with a scored recovery (1 = yes)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, outcome_scored::int AS scored FROM daily_outcomes WHERE $__timeFilter((local_date + 1)::timestamp) AND local_date < (now() AT TIME ZONE (SELECT local_timezone FROM app_config))::date ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Webhook events per day",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT date_trunc('day', received_at) AS time, type AS metric, count(*) AS events FROM webhook_events WHERE $__timeFilter(received_at) GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Nightly HRV (ms)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, hrv_rmssd_milli AS hrv FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 11
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Resting heart rate (bpm)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, resting_heart_rate AS rhr FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 11
+      }
+    },
+    {
+      "type": "table",
+      "title": "Recent syncs",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT started_at, kind, rows_upserted, rows_deleted, round(extract(epoch FROM finished_at - started_at)) AS seconds, error FROM sync_runs ORDER BY id DESC LIMIT 15",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm"
+      },
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 18
+      }
+    },
+    {
+      "type": "table",
+      "title": "Rows by score state",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT 'cycles' AS record, score_state, count(*) AS rows FROM cycles GROUP BY 2 UNION ALL SELECT 'sleeps', score_state, count(*) FROM sleeps WHERE deleted_at IS NULL GROUP BY 2 UNION ALL SELECT 'recoveries', score_state, count(*) FROM recoveries WHERE deleted_at IS NULL GROUP BY 2 UNION ALL SELECT 'workouts', score_state, count(*) FROM workouts WHERE deleted_at IS NULL GROUP BY 2 ORDER BY 1, 2",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm"
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 18
+      }
+    },
+    {
+      "type": "table",
+      "title": "Webhook events that failed or are retrying",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT received_at, type, resource_id, status, attempts, error FROM webhook_events WHERE status <> 'done' ORDER BY received_at DESC LIMIT 20",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm"
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      }
+    }
+  ]
+}

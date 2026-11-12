@@ -19,6 +19,7 @@ from whoop_lab.db import make_engine, make_session_factory
 from whoop_lab.ingest import sync as sync_module
 from whoop_lab.ingest.sync import SyncSummary
 from whoop_lab.log import configure_logging
+from whoop_lab.setup_db import setup_database
 from whoop_lab.whoop.client import WhoopClient
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -78,6 +79,22 @@ def sync(
 ) -> None:
     """Run the reconciliation now: poll cycles and re-fetch the trailing window."""
     _report(asyncio.run(_with_client("manual", None, days)))
+
+
+async def _setup_db() -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    engine = make_engine(settings.db_url)
+    try:
+        await setup_database(make_session_factory(engine), settings)
+    finally:
+        await engine.dispose()
+
+
+@app.command("setup-db")
+def setup_db() -> None:
+    """Apply settings the database needs (timezone, Grafana role). Runs on every start."""
+    asyncio.run(_setup_db())
 
 
 def main() -> None:

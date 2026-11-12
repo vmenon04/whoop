@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from whoop_lab.health import check_morning_recovery
 from whoop_lab.ingest.events import drain_events
 from whoop_lab.ingest.sync import SyncSummary, reconcile
 from whoop_lab.notify import notify
@@ -38,3 +39,7 @@ async def reconcile_job(ctx: WorkerContext) -> SyncSummary:
     return await reconcile(
         ctx.whoop, ctx.session_factory, window_days=ctx.settings.reconcile_window_days
     )
+
+
+async def morning_recovery_job(ctx: WorkerContext) -> bool:
+    return await check_morning_recovery(ctx.session_factory, ctx.settings, http=ctx.http)

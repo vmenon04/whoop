@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: whoop-lab
+    uid: whoop-pg
+    type: postgres
+    access: proxy
+    url: db:5432
+    user: grafana_ro
+    isDefault: true
+    editable: false
+    jsonData:
+      database: ${WHOOP_DB_NAME}
+      sslmode: disable
+      postgresVersion: 1600
+    secureJsonData:
+      password: ${GRAFANA_DB_PASSWORD}

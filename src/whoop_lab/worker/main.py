@@ -61,6 +61,14 @@ def build_scheduler(ctx: WorkerContext) -> AsyncIOScheduler:
         next_run_time=now + timedelta(minutes=1),
         id="reconcile",
     )
+    scheduler.add_job(
+        _guarded(jobs.morning_recovery_job, ctx),
+        "cron",
+        hour=settings.morning_alert_hour,
+        minute=0,
+        timezone=settings.tz,
+        id="morning_recovery",
+    )
     return scheduler
 
 
