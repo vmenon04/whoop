@@ -1,12 +1,20 @@
 """Nightly metrics derived from the band's per-second records.
 
 Each algorithm below states where it comes from and takes its numbers from
-`Params`. `METRICS_VERSION` names the whole set: change any algorithm or default
-and it must change too, so results computed under different definitions are
-never mixed. Nothing here is a WHOOP score, and none of it is validated beyond
-what the `whoop-ble` skill records.
+`Params`. Every one is a published or reference-project method, cited where it is
+used; none is tuned to reproduce WHOOP's numbers. `METRICS_VERSION` names the whole
+set: change any algorithm or default and it must change too, so results computed
+under different definitions are never mixed. Nothing here is a WHOOP score, and
+none of it is validated beyond what the `whoop-ble` skill records.
 
 Pure functions: no database, no device.
+
+Versions:
+- ble-nightly-1: R-R cleaned with the 20% successive-difference rule, which breaks a
+  run at every rejected beat; respiratory rate from 60 s FFT bins (1/min resolution).
+- ble-nightly-2: R-R corrected with the Kubios-style threshold filter (Strong, 200 ms),
+  the setting that agreed best with ECG for WHOOP during sleep; respiratory rate is
+  the reference project's own function, unchanged.
 """
 
 from __future__ import annotations
@@ -17,13 +25,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from itertools import pairwise
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import numpy as np
+from scipy.interpolate import CubicSpline
 
 from whoop_lab.ble.decode import Biometric
+from whoop_lab.ble.vendor.whoop5 import experimental
 
-METRICS_VERSION = "ble-nightly-1"
+METRICS_VERSION = "ble-nightly-2"
 
 
 @dataclass(frozen=True)
@@ -38,12 +49,20 @@ class Params:
     # A main sleep ends before this local hour, as in the daily_outcomes view.
     wake_cutoff_hour: int = 14
 
-    # R-R cleaning. Physiological range, then the 20% rule: an interval that differs
-    # from the one before it by more than a fifth is treated as ectopic or an artifact
-    # (Malik et al., Task Force of the ESC and NASPE, Circulation 1996;93:1043).
+    # R-R range, as in LeonardSEO/wearable5.0 `rmssd_ms`. Outside it a run ends.
     rr_min_ms: int = 300
     rr_max_ms: int = 2000
-    rr_max_relative_change: float = 0.20
+    # Artifact correction in the style of Kubios threshold-based correction: each
+    # interval is compared with the median of the intervals around it, and one that
+    # differs by more than the threshold is replaced by cubic interpolation (as in the
+    # `hrv` package's threshold filter, which follows Kubios). 200 ms is Kubios
+    # "Strong" in the version Bellenger et al. tested: with WHOOP's own filter it gave
+    # the best agreement with ECG during sleep (Sensors 2021;21:3571).
+    rr_local_median_beats: int = 5
+    rr_correction_threshold_ms: int = 200
+    # A night with more than this share of corrected intervals is marked poor quality;
+    # 5% is the limit the HRV literature uses for interpolated beats.
+    rr_corrected_share_limit: float = 0.05
     # A beat was missed if the silence since the last one exceeds this many intervals,
     # plus an allowance because records carry whole-second timestamps.
     rr_gap_factor: float = 1.6
@@ -57,14 +76,8 @@ class Params:
     segment_s: int = 300
     segment_min_differences: int = 100
 
-    # Respiratory rate from respiratory sinus arrhythmia: resample the R-R series,
-    # weight the spectrum by frequency squared to suppress slow drift, take the peak.
-    # Method as in wearable5.0 `respiratory_rate`.
-    resp_window_s: int = 60
-    resp_sample_hz: float = 4.0
-    resp_low_hz: float = 0.1
-    resp_high_hz: float = 0.5
-    resp_min_beats: int = 35
+    # Respiratory rate: wearable5.0 `experimental.respiratory_rate` with its own
+    # defaults (60 s windows, 0.1-0.5 Hz, 0.005 Hz steps); see `respiratory_rate`.
 
     # SpO2 arrives in windows of about 30 s every 20 minutes. Valid seconds closer
     # together than this belong to one window.
@@ -126,15 +139,15 @@ def main_sleep_by_wake_date(
     return chosen
 
 
-def clean_rr_runs(
+def rr_runs(
     records: Sequence[Biometric], params: Params = DEFAULT_PARAMS
 ) -> list[tuple[int, list[int]]]:
-    """Runs of consecutive, believable R-R intervals as (start second, intervals).
+    """Runs of consecutive R-R intervals as (start second, intervals), uncorrected.
 
     A run ends wherever beat-to-beat adjacency can no longer be assumed: more time
     has passed since the last reported beat than one interval can explain (a beat
-    went unreported), an interval is outside the physiological range, or one fails
-    the 20% rule. Differences are only ever taken inside a run, never across a break.
+    went unreported), or an interval is outside the physiological range.
+    Differences are only ever taken inside a run, never across a break.
 
     A second with no interval is not by itself a gap: below 60 beats a minute some
     seconds simply contain no beat.
@@ -156,19 +169,69 @@ def clean_rr_runs(
             if not params.rr_min_ms <= interval <= params.rr_max_ms:
                 current = []
                 continue
-            if (
-                current
-                and abs(interval - current[-1]) > params.rr_max_relative_change * current[-1]
-            ):
-                current = []
-                continue
             if not current:
                 runs.append((record.unix_s, current))
             current.append(interval)
     return [(start, run) for start, run in runs if len(run) >= 2]
 
 
-def rmssd(runs: Sequence[tuple[int, list[int]]], min_differences: int) -> float | None:
+def correct_run(run: Sequence[int], params: Params = DEFAULT_PARAMS) -> tuple[list[float], int]:
+    """Threshold-based artifact correction of one run: (corrected intervals, beats corrected).
+
+    Each interval is compared with the median of the `rr_local_median_beats` intervals
+    centred on it (fewer at the ends of the run). One that differs by more than
+    `rr_correction_threshold_ms` is replaced by a cubic spline through the accepted
+    intervals, by beat number. A flagged interval before the first or after the last
+    accepted one cannot be interpolated and is dropped; it still counts as corrected.
+    """
+    values = np.asarray(run, dtype=float)
+    half = params.rr_local_median_beats // 2
+    medians = np.array(
+        [np.median(values[max(0, i - half) : i + half + 1]) for i in range(len(values))]
+    )
+    flagged = np.abs(values - medians) > params.rr_correction_threshold_ms
+    corrected = int(flagged.sum())
+    if not corrected:
+        return values.tolist(), 0
+    accepted = np.flatnonzero(~flagged)
+    if len(accepted) < 2:
+        return [], len(values)
+    inner = np.arange(accepted[0], accepted[-1] + 1)
+    if len(accepted) >= 3:
+        spline = CubicSpline(accepted, values[accepted])
+        filled = np.where(flagged[inner], spline(inner), values[inner])
+    else:
+        filled = np.where(
+            flagged[inner], np.interp(inner, accepted, values[accepted]), values[inner]
+        )
+    return [float(v) for v in filled], corrected
+
+
+@dataclass(frozen=True)
+class CleanRR:
+    runs: list[tuple[int, list[float]]]
+    intervals: int  # intervals in range, before correction
+    corrected: int  # intervals replaced or dropped by the correction
+
+    @property
+    def corrected_share(self) -> float | None:
+        return self.corrected / self.intervals if self.intervals else None
+
+
+def clean_rr(records: Sequence[Biometric], params: Params = DEFAULT_PARAMS) -> CleanRR:
+    """Runs of R-R intervals with artifacts corrected (see `rr_runs` and `correct_run`)."""
+    runs: list[tuple[int, list[float]]] = []
+    intervals = corrected = 0
+    for start, run in rr_runs(records, params):
+        values, count = correct_run(run, params)
+        intervals += len(run)
+        corrected += count
+        if len(values) >= 2:
+            runs.append((start, values))
+    return CleanRR(runs, intervals, corrected)
+
+
+def rmssd(runs: Sequence[tuple[int, Sequence[float]]], min_differences: int) -> float | None:
     """Root mean square of successive differences, in ms, over differences inside runs."""
     squares = [(b - a) ** 2 for _, run in runs for a, b in pairwise(run)]
     if len(squares) < min_differences:
@@ -190,37 +253,24 @@ def segment_rmssd_median(
     values = [
         value
         for group in segments.values()
-        if (value := rmssd(clean_rr_runs(group, params), params.segment_min_differences))
+        if (value := rmssd(clean_rr(group, params).runs, params.segment_min_differences))
         is not None
     ]
     return (statistics.median(values) if values else None), len(values)
 
 
-def respiratory_rate(
-    records: Sequence[Biometric], params: Params = DEFAULT_PARAMS
-) -> tuple[float | None, int]:
-    """Breaths per minute (median over windows) and the number of windows used."""
-    step = 1.0 / params.resp_sample_hz
-    samples = int(params.resp_window_s * params.resp_sample_hz)
-    frequencies = np.fft.rfftfreq(samples, d=step)
-    band = (frequencies >= params.resp_low_hz) & (frequencies <= params.resp_high_hz)
-    rates: list[float] = []
-    for start, run in clean_rr_runs(records, params):
-        beat_times = start + np.cumsum(run) / 1000.0
-        intervals = np.asarray(run, dtype=float)
-        window_start = float(beat_times[0])
-        while window_start + params.resp_window_s <= beat_times[-1]:
-            inside = (beat_times >= window_start) & (
-                beat_times < window_start + params.resp_window_s
-            )
-            if inside.sum() >= params.resp_min_beats:
-                grid = window_start + np.arange(samples) * step
-                series = np.interp(grid, beat_times, intervals)
-                series = (series - series.mean()) * np.hanning(samples)
-                power = np.abs(np.fft.rfft(series)) ** 2 * frequencies**2
-                if power[band].max() > 0:
-                    rates.append(float(frequencies[band][power[band].argmax()] * 60.0))
-            window_start += params.resp_window_s
+def respiratory_rate(records: Sequence[Biometric]) -> tuple[float | None, int]:
+    """Breaths per minute (median over windows) and the number of windows with a value.
+
+    The reference project's `respiratory_rate`, called unchanged on the reported R-R
+    series in order: it keeps 300-2000 ms intervals and drops steps of 200 ms or more,
+    cuts 60 s windows of beat time, and takes the peak of the f-squared-weighted
+    spectrum every 0.005 Hz between 0.1 and 0.5 Hz (respiratory sinus arrhythmia).
+    Its documentation notes a slight upward bias from missed beats.
+    """
+    series = [interval for record in records for interval in record.rr_ms]
+    windows: list[dict[str, Any]] = experimental.respiratory_rate(series)
+    rates = [float(w["breaths_per_min"]) for w in windows if w["breaths_per_min"] is not None]
     return (statistics.median(rates) if rates else None), len(rates)
 
 
@@ -261,6 +311,8 @@ class NightMetrics:
     sleep_end_unix: int
     seconds_recorded: int
     rr_coverage: float | None  # reported intervals / beats implied by the heart rate
+    rr_corrected_share: float | None  # intervals corrected / intervals in range
+    rr_quality_ok: bool | None  # corrected share within `rr_corrected_share_limit`
     rmssd_sleep_ms: float | None  # over the detected sleep window
     rmssd_fixed_ms: float | None  # over the fixed local window
     rmssd_segment_median_ms: float | None
@@ -301,7 +353,9 @@ def night_metrics(
     full = [statistics.fmean(v) for v in by_segment.values() if len(v) >= params.segment_s // 2]
 
     segment_median, segments = segment_rmssd_median(asleep, params)
-    breaths, breath_windows = respiratory_rate(asleep, params)
+    breaths, breath_windows = respiratory_rate(asleep)
+    cleaned = clean_rr(asleep, params)
+    share = cleaned.corrected_share
     oxygen = spo2_windows(asleep, params)
     skin = [r.skin_temp_c for r in asleep if r.skin_temp_c is not None]
     fixed = _between(records, *_fixed_window(wake_date, tz, params))
@@ -312,8 +366,10 @@ def night_metrics(
         sleep_end_unix=period.end_unix,
         seconds_recorded=len(asleep),
         rr_coverage=reported / expected_beats if expected_beats else None,
-        rmssd_sleep_ms=rmssd(clean_rr_runs(asleep, params), params.rmssd_min_differences),
-        rmssd_fixed_ms=rmssd(clean_rr_runs(fixed, params), params.rmssd_min_differences),
+        rr_corrected_share=share,
+        rr_quality_ok=None if share is None else share <= params.rr_corrected_share_limit,
+        rmssd_sleep_ms=rmssd(cleaned.runs, params.rmssd_min_differences),
+        rmssd_fixed_ms=rmssd(clean_rr(fixed, params).runs, params.rmssd_min_differences),
         rmssd_segment_median_ms=segment_median,
         rmssd_segments=segments,
         resting_hr_median=float(statistics.median(rates)) if rates else None,

@@ -303,6 +303,9 @@ def ble_nights(
         coverage = "n/a" if night.rr_coverage is None else f"{night.rr_coverage:.0%}"
         typer.echo(f"\nNight ending {night.wake_date}: asleep {start:%H:%M} to {end:%H:%M}")
         typer.echo(f"  beats with an R-R interval: {coverage}")
+        if night.rr_corrected_share is not None:
+            verdict = "ok" if night.rr_quality_ok else "POOR: above 5%, treat HRV with caution"
+            typer.echo(f"  intervals corrected: {night.rr_corrected_share:.1%} ({verdict})")
         typer.echo(
             f"  RMSSD: sleep window {_fmt(night.rmssd_sleep_ms)} ms; "
             f"02:00-06:00 {_fmt(night.rmssd_fixed_ms)} ms; "

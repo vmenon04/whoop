@@ -14,11 +14,13 @@ from whoop_lab.ble.metrics import (
     DEFAULT_PARAMS,
     METRICS_VERSION,
     SleepPeriod,
-    clean_rr_runs,
+    clean_rr,
+    correct_run,
     main_sleep_by_wake_date,
     nightly,
     respiratory_rate,
     rmssd,
+    rr_runs,
     sleep_periods,
     spo2_windows,
 )
@@ -61,25 +63,30 @@ def beats(start: int, intervals: list[int], **fields: object) -> list[Biometric]
 
 def test_rmssd_of_an_alternating_series_is_the_step() -> None:
     records = beats(1_790_000_000, [1000, 1040] * 200)
-    runs = clean_rr_runs(records)
-    assert len(runs) == 1
-    assert rmssd(runs, 100) == pytest.approx(40.0)
+    cleaned = clean_rr(records)
+    assert len(cleaned.runs) == 1
+    assert cleaned.corrected == 0
+    assert rmssd(cleaned.runs, 100) == pytest.approx(40.0)
 
 
 def test_slow_heart_rates_do_not_break_a_run() -> None:
     # 1,500 ms intervals: every third second has no beat at all. That is not missing data.
     records = beats(1_790_000_000, [1500, 1520] * 100, hr=40)
     assert any(not r.rr_ms for r in records)
-    runs = clean_rr_runs(records)
+    runs = rr_runs(records)
     assert len(runs) == 1
     assert len(runs[0][1]) == 200
 
 
-def test_an_ectopic_beat_is_dropped_and_no_difference_spans_it() -> None:
+def test_an_ectopic_beat_is_replaced_by_interpolation() -> None:
     clean = [1000, 1010] * 100
     with_ectopic = [*clean[:100], 600, 1400, *clean[100:]]  # premature beat, then a pause
-    value = rmssd(clean_rr_runs(beats(1_790_000_000, with_ectopic)), 100)
-    assert value == pytest.approx(10.0, abs=0.01)
+    cleaned = clean_rr(beats(1_790_000_000, with_ectopic))
+    assert len(cleaned.runs) == 1  # corrected in place: the run is not broken
+    assert cleaned.corrected == 2
+    assert cleaned.corrected_share == pytest.approx(2 / 202)
+    value = rmssd(cleaned.runs, 100)
+    assert value == pytest.approx(10.0, abs=1.0)
     unfiltered = math.sqrt(
         sum((b - a) ** 2 for a, b in pairwise(with_ectopic)) / (len(with_ectopic) - 1)
     )
@@ -87,7 +94,7 @@ def test_an_ectopic_beat_is_dropped_and_no_difference_spans_it() -> None:
 
 
 def test_out_of_range_intervals_are_rejected() -> None:
-    runs = clean_rr_runs(beats(1_790_000_000, [1000, 1000, 250, 1000, 1000, 2500, 1000, 1000]))
+    runs = rr_runs(beats(1_790_000_000, [1000, 1000, 250, 1000, 1000, 2500, 1000, 1000]))
     assert [run for _, run in runs] == [[1000, 1000], [1000, 1000], [1000, 1000]]
 
 
@@ -95,14 +102,31 @@ def test_a_stretch_of_unreported_beats_ends_the_run() -> None:
     first = beats(1_790_000_000, [1000, 1040] * 60)
     later = beats(first[-1].unix_s + 30, [1000, 1040] * 60)  # 30 s with nothing reported
     silence = [second(t) for t in range(first[-1].unix_s + 1, later[0].unix_s)]
-    runs = clean_rr_runs([*first, *silence, *later])
+    runs = clean_rr([*first, *silence, *later]).runs
     assert len(runs) == 2
     # The difference across the gap is never taken.
     assert rmssd(runs, 100) == pytest.approx(40.0)
 
 
 def test_too_few_differences_gives_no_value() -> None:
-    assert rmssd(clean_rr_runs(beats(1_790_000_000, [1000, 1040] * 10)), 100) is None
+    assert rmssd(clean_rr(beats(1_790_000_000, [1000, 1040] * 10)).runs, 100) is None
+
+
+def test_large_real_variability_is_kept() -> None:
+    # Smooth swings of 180 ms over a five-beat breath: no beat is more than 200 ms from
+    # its neighbours' median, so nothing is corrected, although some successive steps
+    # exceed 20% of the interval and the ble-nightly-1 rule would have dropped them.
+    intervals = [round(900 + 180 * math.sin(2 * math.pi * i / 5)) for i in range(400)]
+    assert any(abs(b - a) > 0.2 * a for a, b in pairwise(intervals))
+    values, corrected = correct_run(intervals)
+    assert corrected == 0
+    assert values == intervals
+
+
+def test_a_flagged_beat_at_the_edge_is_dropped() -> None:
+    values, corrected = correct_run([1600, 1000, 1010, 1000, 1010, 1000])
+    assert corrected == 1
+    assert values == [1000, 1010, 1000, 1010, 1000]
 
 
 # --- sleep windows ------------------------------------------------------------------------
@@ -196,6 +220,8 @@ def test_nightly_metrics_for_a_synthetic_night() -> None:
     assert result.resting_hr_median == 49
     assert result.resting_hr_lowest_segment == pytest.approx(49.0)
     assert result.rr_coverage == pytest.approx(1.0, abs=0.02)
+    assert result.rr_corrected_share == 0
+    assert result.rr_quality_ok is True
     assert result.skin_temp_mean_c == pytest.approx(33.5)
     assert result.spo2_mean is None
     assert result.spo2_windows == 0
@@ -208,9 +234,11 @@ def test_no_sleep_means_no_nights() -> None:
 
 def test_defaults_are_the_documented_ones() -> None:
     """Changing a default changes what a metric means: bump METRICS_VERSION with it."""
-    assert METRICS_VERSION == "ble-nightly-1"
+    assert METRICS_VERSION == "ble-nightly-2"
     assert (DEFAULT_PARAMS.rr_min_ms, DEFAULT_PARAMS.rr_max_ms) == (300, 2000)
-    assert DEFAULT_PARAMS.rr_max_relative_change == 0.20
+    assert DEFAULT_PARAMS.rr_local_median_beats == 5
+    assert DEFAULT_PARAMS.rr_correction_threshold_ms == 200
+    assert DEFAULT_PARAMS.rr_corrected_share_limit == 0.05
     assert (DEFAULT_PARAMS.fixed_window_start.hour, DEFAULT_PARAMS.fixed_window_end.hour) == (2, 6)
     assert DEFAULT_PARAMS.sleep_min_duration_s == 1200
     assert DEFAULT_PARAMS.wake_cutoff_hour == 14
