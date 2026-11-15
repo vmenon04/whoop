@@ -30,6 +30,7 @@ from whoop_lab.analysis.simulate import (
 from whoop_lab.ble.capture import NOTIFICATIONS_FILE
 from whoop_lab.ble.decode import DECODER_VERSION, load_biometrics
 from whoop_lab.ble.metrics import METRICS_VERSION, nightly
+from whoop_lab.ble.store import describe_files, recent_captures, since_days, store_nights
 from whoop_lab.config import get_settings
 from whoop_lab.db import make_engine, make_session_factory
 from whoop_lab.experiments.outcomes import OUTCOMES
@@ -325,6 +326,42 @@ def ble_nights(
             f"({night.spo2_windows} windows)"
         )
         typer.echo(f"  skin temperature: {_fmt(night.skin_temp_mean_c, 2)} C")
+
+
+async def _ble_import(captures_dir: Path, days: int | None) -> None:
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    tz = ZoneInfo(settings.local_timezone)
+    files = recent_captures(captures_dir, since_days(days), tz)
+    typer.echo(f"captures read: {describe_files(files)}")
+    records = load_biometrics(files)
+    nights = nightly(records, tz)
+    engine = make_engine(settings.db_url)
+    try:
+        stored = await store_nights(make_session_factory(engine), nights, DECODER_VERSION)
+    finally:
+        await engine.dispose()
+    dates = ", ".join(str(night.wake_date) for night in nights) or "none"
+    typer.echo(
+        f"{len(records)} per-second records; {METRICS_VERSION}; nights found: {dates}; "
+        f"rows written: {stored}"
+    )
+
+
+@app.command("ble-import")
+def ble_import(
+    captures_dir: Annotated[
+        Path, typer.Option(help="Directory holding the capture directories.")
+    ] = Path("/captures"),
+    days: Annotated[int, typer.Option(help="Read captures taken in the last N days.")] = 3,
+    everything: Annotated[
+        bool, typer.Option("--all", help="Read every capture, to recompute all nights.")
+    ] = False,
+) -> None:
+    """Compute nightly metrics from Bluetooth captures and store them in ble_nights."""
+    if not captures_dir.is_dir():
+        raise typer.BadParameter(f"not a directory: {captures_dir}")
+    asyncio.run(_ble_import(captures_dir, None if everything else days))
 
 
 def main() -> None:

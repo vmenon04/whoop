@@ -49,6 +49,7 @@ async def test_grafana_role_reads_analysis_data_but_not_secrets(
                 "SELECT local_timezone FROM app_config",
                 "SELECT local_date, arm, complied, note FROM assignments",
                 "SELECT count(*) FROM experiment_results",
+                "SELECT count(*) FROM ble_nights",
             ):
                 await conn.execute(text(readable))
         for forbidden in (
@@ -62,6 +63,7 @@ async def test_grafana_role_reads_analysis_data_but_not_secrets(
             "SELECT * FROM assignments",
             "INSERT INTO daily_tags (local_date, key, value) VALUES ('2026-01-01', 'a', 'b')",
             "DELETE FROM cycles",
+            "DELETE FROM ble_nights",
             "UPDATE app_config SET local_timezone = 'UTC'",
         ):
             async with engine.connect() as conn:
