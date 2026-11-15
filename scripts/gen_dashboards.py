@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from whoop_lab.ble.metrics import METRICS_VERSION
+from whoop_lab.ble.minutes import MINUTES_VERSION
 
 DS = {"type": "postgres", "uid": "whoop-pg"}
 OUT = Path(__file__).resolve().parent.parent / "grafana" / "dashboards"
@@ -84,6 +85,43 @@ def table(title: str, sql: str) -> Panel:
     }
 
 
+def state_timeline(title: str, sql: str, colors: dict[str, str]) -> Panel:
+    return {
+        "type": "state-timeline",
+        "title": title,
+        "datasource": DS,
+        "targets": [target(sql)],
+        "fieldConfig": {
+            "defaults": {
+                "mappings": [
+                    {
+                        "type": "value",
+                        "options": {
+                            value: {"color": color, "index": index}
+                            for index, (value, color) in enumerate(colors.items())
+                        },
+                    }
+                ],
+                "color": {"mode": "thresholds"},
+                "thresholds": {"mode": "absolute", "steps": [{"value": None, "color": "text"}]},
+            },
+            "overrides": [],
+        },
+        "options": {"mergeValues": True, "showValue": "never", "rowHeight": 0.8},
+    }
+
+
+def annotation(name: str, sql: str, color: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "datasource": DS,
+        "enable": True,
+        "iconColor": color,
+        "rawQuery": sql,
+        "target": target(sql) | {"refId": "Anno"},
+    }
+
+
 def layout(rows: list[tuple[int, list[Panel]]]) -> list[Panel]:
     """Each row is (height, panels). Panels share the 24-column width equally."""
     placed: list[Panel] = []
@@ -109,8 +147,10 @@ def dashboard(
     *,
     days: int,
     variables: list[dict[str, Any]] | None = None,
+    annotations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
+        "annotations": {"list": annotations or []},
         "templating": {"list": variables or []},
         "uid": uid,
         "title": title,
@@ -360,7 +400,33 @@ EXPERIMENT_RESULTS = dashboard(
 
 # Band metrics are shown for the current metrics version only: regenerate after a bump.
 BAND = f"ble_nights WHERE metrics_version = '{METRICS_VERSION}'"
+MINUTES = f"ble_minutes WHERE minutes_version = '{MINUTES_VERSION}'"
+LOCAL_DAY = "(minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date::timestamp"
+# Grafana draws a gap, not a line, where minutes are missing.
+GAPS = {"insertNulls": 120_000}
 WAKE = "(local_date + 1)::timestamp"
+
+# Per WHOOP cycle, WHOOP's value beside the band's over the same span. Only closed,
+# scored cycles the band recorded for at least 95% of, so partial captures do not
+# masquerade as disagreement.
+CYCLE_BAND = (
+    "SELECT c.start AS time, '{name}' AS metric, {band} AS value "
+    f"FROM cycles c JOIN ble_minutes m ON m.minutes_version = '{MINUTES_VERSION}' "
+    'AND m.minute >= c.start AND m.minute < c."end" '
+    "WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) "
+    'GROUP BY c.id, c.start, c."end" '
+    'HAVING sum(m.seconds_recorded) >= 0.95 * extract(epoch FROM c."end" - c.start)'
+)
+CYCLE_CHECK = (
+    "SELECT c.start AS time, 'WHOOP' AS metric, {whoop} AS value FROM cycles c "
+    "WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) "
+    'AND {whoop} IS NOT NULL AND c."end" IS NOT NULL '
+    "AND (SELECT sum(seconds_recorded) FROM ble_minutes "
+    f"WHERE minutes_version = '{MINUTES_VERSION}' "
+    'AND minute >= c.start AND minute < c."end") '
+    '>= 0.95 * extract(epoch FROM c."end" - c.start) '
+    "UNION ALL " + CYCLE_BAND
+)
 
 
 def both(whoop_column: str, band_column: str) -> str:
@@ -456,6 +522,52 @@ NIGHTLY_HEALTH = dashboard(
             (
                 8,
                 [
+                    series(
+                        "Steps per day (band counter; see the per-cycle check below)",
+                        f"SELECT {LOCAL_DAY} AS time, sum(steps) AS steps "
+                        f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+                        bars=True,
+                    ),
+                    series(
+                        "Active minutes per day (band: walking or running)",
+                        f"SELECT {LOCAL_DAY} AS time, sum(seconds_walk) / 60.0 AS walking, "
+                        "sum(seconds_run) / 60.0 AS running "
+                        f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+                        bars=True,
+                        stacking={"mode": "normal"},
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "Average heart rate per WHOOP cycle (cycles the band covered for 95%+)",
+                        CYCLE_CHECK.format(
+                            whoop="c.average_heart_rate",
+                            band="sum(m.hr_mean * m.seconds_with_hr) / nullif(sum(m.seconds_with_hr), 0)",
+                            name="Band",
+                        )
+                        + " ORDER BY 1",
+                        drawStyle="points",
+                        pointSize=8,
+                    ),
+                    series(
+                        "Steps per WHOOP cycle: WHOOP vs the band's two counters (95%+ covered)",
+                        CYCLE_CHECK.format(
+                            whoop="c.step_count", band="sum(m.steps)", name="Band step_counter"
+                        )
+                        + " UNION ALL "
+                        + CYCLE_BAND.format(band="sum(m.steps_hw)", name="Band hw_step_counter")
+                        + " ORDER BY 1",
+                        drawStyle="points",
+                        pointSize=8,
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
                     table(
                         "Band nights",
                         "SELECT wake_date, sleep_start, sleep_end, "
@@ -476,10 +588,92 @@ NIGHTLY_HEALTH = dashboard(
     days=30,
 )
 
+DAY_VIEW = dashboard(
+    "whoop-day-view",
+    "Day view",
+    layout(
+        [
+            (
+                5,
+                [
+                    state_timeline(
+                        "Band state",
+                        f"SELECT minute AS time, band_state AS state FROM {MINUTES} "
+                        "AND $__timeFilter(minute) ORDER BY 1",
+                        {
+                            "SLEEP": "dark-blue",
+                            "STILL": "light-blue",
+                            "WAKE": "green",
+                            "UP": "orange",
+                        },
+                    )
+                ],
+            ),
+            (
+                9,
+                [
+                    series(
+                        "Heart rate per minute (bpm): mean, min and max",
+                        'SELECT minute AS time, hr_mean AS "mean", hr_min AS "min", hr_max AS "max" '
+                        f"FROM {MINUTES} AND $__timeFilter(minute) ORDER BY 1",
+                        **GAPS,
+                    )
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "Minutes walking and running, per 15 minutes",
+                        "SELECT date_bin('15 minutes', minute, TIMESTAMPTZ '2000-01-01') AS time, "
+                        "sum(seconds_walk) / 60.0 AS walking, sum(seconds_run) / 60.0 AS running "
+                        f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+                        bars=True,
+                        stacking={"mode": "normal"},
+                    ),
+                    series(
+                        "Steps per hour (band counter, being checked against WHOOP)",
+                        "SELECT date_trunc('hour', minute) AS time, sum(steps) AS steps "
+                        f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+                        bars=True,
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "Movement intensity per minute (g)",
+                        f"SELECT minute AS time, accel_mean_g AS movement FROM {MINUTES} "
+                        "AND $__timeFilter(minute) ORDER BY 1",
+                        **GAPS,
+                    ),
+                    series(
+                        "Skin temperature per minute (C)",
+                        f"SELECT minute AS time, skin_temp_c AS skin FROM {MINUTES} "
+                        "AND $__timeFilter(minute) ORDER BY 1",
+                        **GAPS,
+                    ),
+                ],
+            ),
+        ]
+    ),
+    days=2,
+    annotations=[
+        annotation(
+            "WHOOP workouts",
+            'SELECT start AS time, "end" AS timeend, sport_name AS text FROM workouts '
+            "WHERE deleted_at IS NULL AND $__timeFilter(start)",
+            "orange",
+        )
+    ],
+)
+
 DASHBOARDS = {
     "data-health.json": DATA_HEALTH,
     "experiment-results.json": EXPERIMENT_RESULTS,
     "nightly-health.json": NIGHTLY_HEALTH,
+    "day-view.json": DAY_VIEW,
 }
 
 if __name__ == "__main__":

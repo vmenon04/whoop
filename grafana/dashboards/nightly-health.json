@@ -1,4 +1,7 @@
 {
+  "annotations": {
+    "list": []
+  },
   "templating": {
     "list": []
   },
@@ -525,6 +528,193 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Steps per day (band counter; see the per-cycle check below)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date::timestamp AS time, sum(steps) AS steps FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Active minutes per day (band: walking or running)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date::timestamp AS time, sum(seconds_walk) / 60.0 AS walking, sum(seconds_run) / 60.0 AS running FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Average heart rate per WHOOP cycle (cycles the band covered for 95%+)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT c.start AS time, 'WHOOP' AS metric, c.average_heart_rate AS value FROM cycles c WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) AND c.average_heart_rate IS NOT NULL AND c.\"end\" IS NOT NULL AND (SELECT sum(seconds_recorded) FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND minute >= c.start AND minute < c.\"end\") >= 0.95 * extract(epoch FROM c.\"end\" - c.start) UNION ALL SELECT c.start AS time, 'Band' AS metric, sum(m.hr_mean * m.seconds_with_hr) / nullif(sum(m.seconds_with_hr), 0) AS value FROM cycles c JOIN ble_minutes m ON m.minutes_version = 'ble-minutes-1' AND m.minute >= c.start AND m.minute < c.\"end\" WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) GROUP BY c.id, c.start, c.\"end\" HAVING sum(m.seconds_recorded) >= 0.95 * extract(epoch FROM c.\"end\" - c.start) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Steps per WHOOP cycle: WHOOP vs the band's two counters (95%+ covered)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT c.start AS time, 'WHOOP' AS metric, c.step_count AS value FROM cycles c WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) AND c.step_count IS NOT NULL AND c.\"end\" IS NOT NULL AND (SELECT sum(seconds_recorded) FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND minute >= c.start AND minute < c.\"end\") >= 0.95 * extract(epoch FROM c.\"end\" - c.start) UNION ALL SELECT c.start AS time, 'Band step_counter' AS metric, sum(m.steps) AS value FROM cycles c JOIN ble_minutes m ON m.minutes_version = 'ble-minutes-1' AND m.minute >= c.start AND m.minute < c.\"end\" WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) GROUP BY c.id, c.start, c.\"end\" HAVING sum(m.seconds_recorded) >= 0.95 * extract(epoch FROM c.\"end\" - c.start) UNION ALL SELECT c.start AS time, 'Band hw_step_counter' AS metric, sum(m.steps_hw) AS value FROM cycles c JOIN ble_minutes m ON m.minutes_version = 'ble-minutes-1' AND m.minute >= c.start AND m.minute < c.\"end\" WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) GROUP BY c.id, c.start, c.\"end\" HAVING sum(m.seconds_recorded) >= 0.95 * extract(epoch FROM c.\"end\" - c.start) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      }
+    },
+    {
       "type": "table",
       "title": "Band nights",
       "datasource": {
@@ -550,12 +740,12 @@
       "options": {
         "cellHeight": "sm"
       },
-      "id": 11,
+      "id": 15,
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 44
       }
     }
   ]
