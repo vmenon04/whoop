@@ -20,6 +20,7 @@ docker compose exec worker whoop-lab analyze <name-or-id>
 uv run whoop-lab simulate                 # analysis validation; needs no database
 uv run --group ble python scripts/ble_spike.py --help   # talk to the band (see the whoop-ble skill)
 uv run whoop-lab ble-nights captures/*   # nightly metrics from Bluetooth captures; needs no database
+./scripts/push_ble.sh [--all]             # copy captures to the server and ble-import them into ble_nights
 uv run python scripts/gen_dashboards.py   # regenerate grafana/dashboards/*.json
 ```
 

@@ -64,6 +64,10 @@ services:
   worker:
     <<: *app
     command: ["python", "-m", "whoop_lab.worker.main"]
+    volumes:
+      # Bluetooth captures pushed from the Mac by scripts/push_ble.sh, for `whoop-lab
+      # ble-import`. Biometric data: git-ignored, never committed.
+      - ./captures:/captures:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

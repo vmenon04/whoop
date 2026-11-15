@@ -10,7 +10,7 @@ A self-hosted service that keeps a complete copy of your WHOOP data in Postgres 
 | `worker` | Refreshes the token, processes webhook events, polls cycles and reconciles the last 7 days every 3 hours. Draws tomorrow's arm each evening, alerts on a missing morning recovery at noon, and appends results at 13:00. |
 | `db` | Postgres 16. All state, and the job queue. |
 | `migrate` | Runs `alembic upgrade head` and `whoop-lab setup-db` (timezone, Grafana's read-only role) on every `up`, then exits. |
-| `grafana` | Two dashboards provisioned from `grafana/`: data health and experiment results. Served under `/grafana`, read-only database role, viewable without a second login. |
+| `grafana` | Three dashboards provisioned from `grafana/`: data health, experiment results and nightly health. Served under `/grafana`, read-only database role, viewable without a second login. |
 
 `api` and `grafana` are published on `127.0.0.1` only (ports 8000 and 3001 by default; `API_PORT` and `GRAFANA_PORT` in `.env` change them). The tunnel is the only way in.
 
@@ -136,6 +136,17 @@ docker compose exec worker whoop-lab simulate
 - A monitor outside goes through Cloudflare Access. Create a service token in Zero Trust, add a **Service Auth** policy for it on an application scoped to `whoop.vasumenon.com/uptime`, and have the monitor send the `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers. Prefer this to a Bypass policy: the endpoint reads the database, and a bypass would also tell anyone whether the service is healthy.
 
 **Notifications** are optional. Set `NTFY_URL` to a full topic URL, either `https://ntfy.sh/<long-random-topic>` or a self-hosted ntfy (`--profile ntfy` starts one on `127.0.0.1:8080`).
+
+## Band data in Grafana
+
+Nightly metrics computed from the band's own Bluetooth records (see the `whoop-ble` skill) go to the `ble_nights` table and the **Nightly health** dashboard, beside WHOOP's values for the same nights. After draining the band on the Mac:
+
+```sh
+./scripts/push_ble.sh          # rsync captures/ to the server, then ble-import the last 3 days
+./scripts/push_ble.sh --all    # recompute every night, e.g. after a metrics version change
+```
+
+Run it in a normal terminal: the import uses `sudo docker` on the server, which asks for a password. Captures are copied to `captures/` next to the server checkout (git-ignored, readable by the worker container) and mounted read-only into the worker. Create that directory as your own user before the first `docker compose up`, or Docker creates it owned by root and rsync cannot write to it. Rows are keyed by night and metrics version; the dashboard shows the current version, so regenerate it (`scripts/gen_dashboards.py`) after a version change.
 
 ## Backup and restore
 
