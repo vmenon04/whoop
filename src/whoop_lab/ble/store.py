@@ -1,4 +1,4 @@
-"""Write nightly metrics to `ble_nights`, and pick which captures an import reads."""
+"""Write band metrics to `ble_nights` and `ble_minutes`, and pick captures to import."""
 
 from __future__ import annotations
 
@@ -15,8 +15,9 @@ from sqlalchemy.dialects.postgresql import insert
 
 from whoop_lab.ble.capture import NOTIFICATIONS_FILE
 from whoop_lab.ble.metrics import NightMetrics
+from whoop_lab.ble.minutes import Minute
 from whoop_lab.db import SessionFactory
-from whoop_lab.models import BleNight
+from whoop_lab.models import BleMinute, BleNight
 
 # Capture directories are named by `ble_spike.py` as YYYYMMDD-HHMMSS-<stage>, in the
 # capturing computer's local time.
@@ -58,32 +59,61 @@ def _row(night: NightMetrics, decoder_version: str) -> dict[str, Any]:
     }
 
 
+# Rows per INSERT statement; asyncpg allows at most 32,767 bind parameters.
+CHUNK_ROWS = 1000
+
+
+async def _upsert(
+    session_factory: SessionFactory,
+    table: type[BleNight] | type[BleMinute],
+    keys: set[str],
+    rows: Sequence[dict[str, Any]],
+) -> int:
+    """Insert rows, replacing an existing row only if the new one saw at least as many
+    seconds of records, so a partial capture never overwrites one computed from fuller
+    data. Returns how many rows were inserted or changed."""
+    count = 0
+    async with session_factory() as session, session.begin():
+        for offset in range(0, len(rows), CHUNK_ROWS):
+            chunk = rows[offset : offset + CHUNK_ROWS]
+            statement = insert(table).values(list(chunk))
+            update = {c: statement.excluded[c] for c in chunk[0] if c not in keys} | {
+                "computed_at": func.now()
+            }
+            statement = statement.on_conflict_do_update(
+                index_elements=sorted(keys),
+                set_=update,
+                where=statement.excluded.seconds_recorded >= table.seconds_recorded,
+            )
+            result = await session.execute(statement)
+            count += result.rowcount  # type: ignore[attr-defined]
+    return count
+
+
 async def store_nights(
     session_factory: SessionFactory, nights: Sequence[NightMetrics], decoder_version: str
 ) -> int:
-    """Upsert nights; returns how many rows were inserted or changed.
-
-    An existing row for the same night and metrics version is replaced only when the
-    new computation saw at least as many seconds of sleep, so importing a partial
-    capture never overwrites a night computed from fuller data.
-    """
-    if not nights:
-        return 0
+    """Upsert nights; returns how many rows were inserted or changed (see `_upsert`)."""
     rows = [_row(night, decoder_version) for night in nights]
-    statement = insert(BleNight).values(rows)
-    keys = {"wake_date", "metrics_version"}
-    update = {column: statement.excluded[column] for column in rows[0] if column not in keys} | {
-        "computed_at": func.now()
-    }
-    statement = statement.on_conflict_do_update(
-        index_elements=sorted(keys),
-        set_=update,
-        where=statement.excluded.seconds_recorded >= BleNight.seconds_recorded,
-    )
-    async with session_factory() as session, session.begin():
-        result = await session.execute(statement)
-    count: int = result.rowcount  # type: ignore[attr-defined]
-    return count
+    return await _upsert(session_factory, BleNight, {"wake_date", "metrics_version"}, rows)
+
+
+async def store_minutes(
+    session_factory: SessionFactory, summaries: Sequence[Minute], decoder_version: str
+) -> int:
+    """Upsert minutes; returns how many rows were inserted or changed (see `_upsert`)."""
+    rows = []
+    for summary in summaries:
+        values = dataclasses.asdict(summary)
+        start = values.pop("start_unix")
+        rows.append(
+            {
+                **values,
+                "decoder_version": decoder_version,
+                "minute": datetime.fromtimestamp(start, UTC),
+            }
+        )
+    return await _upsert(session_factory, BleMinute, {"minute", "minutes_version"}, rows)
 
 
 def since_days(days: int | None, now: datetime | None = None) -> datetime | None:

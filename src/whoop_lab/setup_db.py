@@ -32,6 +32,7 @@ GRAFANA_READABLE = (
     "experiments",
     "experiment_results",
     "ble_nights",
+    "ble_minutes",
 )
 # Tables Grafana may read only in part.
 GRAFANA_READABLE_COLUMNS: dict[str, tuple[str, ...]] = {

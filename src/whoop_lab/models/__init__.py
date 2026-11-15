@@ -1,7 +1,7 @@
 """SQLAlchemy models. Importing this package registers every table on Base.metadata."""
 
 from whoop_lab.models.base import Base
-from whoop_lab.models.ble import BleNight
+from whoop_lab.models.ble import BleMinute, BleNight
 from whoop_lab.models.experiments import (
     AppConfig,
     Assignment,
@@ -16,6 +16,7 @@ __all__ = [
     "AppConfig",
     "Assignment",
     "Base",
+    "BleMinute",
     "BleNight",
     "Cycle",
     "DailyTag",

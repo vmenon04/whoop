@@ -46,6 +46,11 @@ class Biometric:
     band_state: str | None  # WAKE, STILL, SLEEP or UP
     skin_temp_c: float | None
     spo2_percent: int | None  # byte 82 when it holds 70..100; see the skill before trusting it
+    # Daytime fields. Counters reset to 0 (see the skill); count only their increases.
+    activity_class: str | None = None  # still, walk or run
+    dynamic_accel_g: float | None = None  # movement intensity
+    step_counter: int | None = None  # noop and johga agree on this field
+    hw_step_counter: int | None = None  # undocumented second counter; resets mid-wear
 
 
 def biometric(decoded: dict[str, Any]) -> Biometric | None:
@@ -62,7 +67,19 @@ def biometric(decoded: dict[str, Any]) -> Biometric | None:
         band_state=decoded.get("band_state"),
         skin_temp_c=float(skin) if skin is not None else None,
         spo2_percent=int(spo2) if spo2 is not None else None,
+        activity_class=decoded.get("activity_class"),
+        dynamic_accel_g=_float(decoded.get("dynamic_accel_g")),
+        step_counter=_int(decoded.get("step_counter")),
+        hw_step_counter=_int(decoded.get("hw_step_counter")),
     )
+
+
+def _float(value: Any) -> float | None:
+    return float(value) if value is not None else None
+
+
+def _int(value: Any) -> int | None:
+    return int(value) if value is not None else None
 
 
 def load_biometrics(capture_files: Iterable[Path]) -> list[Biometric]:

@@ -40,3 +40,30 @@ class BleNight(Base):
     spo2_windows: Mapped[int] = mapped_column(Integer)
     skin_temp_mean_c: Mapped[float | None] = mapped_column(Float)
     computed_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class BleMinute(Base):
+    """One minute of the band's per-second records, as summarised by one version of
+    `ble.minutes`. Written only by `ble.store.store_minutes`."""
+
+    __tablename__ = "ble_minutes"
+
+    minute: Mapped[datetime] = mapped_column(primary_key=True)
+    minutes_version: Mapped[str] = mapped_column(Text, primary_key=True)
+    decoder_version: Mapped[str] = mapped_column(Text)
+    seconds_recorded: Mapped[int] = mapped_column(Integer)
+    seconds_with_hr: Mapped[int] = mapped_column(Integer)
+    hr_mean: Mapped[float | None] = mapped_column(Float)
+    hr_min: Mapped[int | None] = mapped_column(Integer)
+    hr_max: Mapped[int | None] = mapped_column(Integer)
+    rr_intervals: Mapped[int] = mapped_column(Integer)
+    band_state: Mapped[str | None] = mapped_column(Text)
+    seconds_asleep: Mapped[int] = mapped_column(Integer)
+    seconds_still: Mapped[int] = mapped_column(Integer)
+    seconds_walk: Mapped[int] = mapped_column(Integer)
+    seconds_run: Mapped[int] = mapped_column(Integer)
+    steps: Mapped[int] = mapped_column(Integer)
+    steps_hw: Mapped[int] = mapped_column(Integer)
+    accel_mean_g: Mapped[float | None] = mapped_column(Float)
+    skin_temp_c: Mapped[float | None] = mapped_column(Float)
+    computed_at: Mapped[datetime] = mapped_column(server_default=func.now())
