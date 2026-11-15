@@ -411,14 +411,15 @@ CYCLE_CHECK = (
 
 
 def both(whoop_column: str, band_column: str) -> str:
-    """WHOOP's value and the band's for each wake date, as two series."""
+    """The band's value and WHOOP's for each wake date, as two series (band first)."""
     return (
-        f"SELECT {WAKE} AS time, 'WHOOP' AS metric, {whoop_column} AS value "
+        f"SELECT wake_date::timestamp AS time, 'Band ({METRICS_VERSION})' AS metric, "
+        f"{band_column} AS value "
+        f"FROM {BAND} AND $__timeFilter(wake_date::timestamp) AND {band_column} IS NOT NULL "
+        "UNION ALL "
+        f"SELECT {WAKE}, 'WHOOP', {whoop_column} "
         f"FROM daily_outcomes WHERE outcome_scored AND $__timeFilter({WAKE}) "
         f"AND {whoop_column} IS NOT NULL "
-        "UNION ALL "
-        f"SELECT wake_date::timestamp, 'Band ({METRICS_VERSION})', {band_column} "
-        f"FROM {BAND} AND $__timeFilter(wake_date::timestamp) AND {band_column} IS NOT NULL "
         "ORDER BY 1"
     )
 
@@ -444,6 +445,12 @@ WORKOUTS = annotation(
 )
 TEXT = [(None, "text")]
 
+LAST_NIGHT = f"FROM {BAND} ORDER BY wake_date DESC LIMIT 1"
+BAND_SLEEP_HOURS = "extract(epoch FROM sleep_end - sleep_start) / 3600"
+
+# The home page. The band is the primary source: its records are ours to keep. WHOOP's
+# values appear beside it while the subscription lasts, and WHOOP-only scores have
+# their own section at the bottom, which stops filling when the subscription ends.
 HOME = dashboard(
     "whoop-home",
     "Health",
@@ -453,30 +460,39 @@ HOME = dashboard(
                 4,
                 [
                     stat(
-                        "Recovery (WHOOP)",
-                        latest("recovery_score"),
-                        unit="percent",
-                        steps=[(None, "red"), (34, "yellow"), (67, "green")],
+                        "HRV last night (ms)",
+                        f"SELECT rmssd_sleep_ms {LAST_NIGHT}",
+                        unit="ms",
+                        steps=TEXT,
                     ),
                     stat(
-                        "HRV last night (WHOOP)", latest("hrv_rmssd_milli"), unit="ms", steps=TEXT
+                        "Resting heart rate last night",
+                        f"SELECT resting_hr_median {LAST_NIGHT}",
+                        steps=TEXT,
                     ),
-                    stat("Resting heart rate", latest("resting_heart_rate"), steps=TEXT),
                     stat(
-                        "Asleep last night (h)",
-                        latest("asleep_minutes / 60.0", "outcome_sleep_id IS NOT NULL"),
+                        "Sleep period last night (h)",
+                        f"SELECT {BAND_SLEEP_HOURS} {LAST_NIGHT}",
                         unit="h",
                         steps=TEXT,
                         decimals=1,
                     ),
                     stat(
-                        "Strain, latest day", latest("day_strain", "TRUE"), steps=TEXT, decimals=1
+                        "Respiratory rate last night",
+                        f"SELECT respiratory_rate {LAST_NIGHT}",
+                        steps=TEXT,
+                        decimals=1,
                     ),
                     stat(
                         "Steps today, to the last band sync",
                         f"SELECT coalesce(sum(steps), 0) FROM {MINUTES} "
                         f"AND (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date = {TODAY}",
                         steps=TEXT,
+                    ),
+                    stat(
+                        "Days since the last band sync",
+                        f"SELECT current_date - max(wake_date) FROM {BAND}",
+                        steps=[(None, "green"), (2, "orange"), (4, "red")],
                     ),
                 ],
             ),
@@ -485,7 +501,7 @@ HOME = dashboard(
                 [
                     last_days(
                         state_timeline(
-                            "Last 48 hours: asleep, still, awake, up (band)",
+                            "Last 48 hours: asleep, still, awake, up",
                             f"SELECT minute AS time, band_state AS state FROM {MINUTES} "
                             "AND $__timeFilter(minute) ORDER BY 1",
                             {
@@ -538,30 +554,12 @@ HOME = dashboard(
                 8,
                 [
                     series(
-                        "Recovery (%)",
-                        f"SELECT {WAKE} AS time, recovery_score AS recovery FROM daily_outcomes "
-                        f"WHERE outcome_scored AND $__timeFilter({WAKE}) ORDER BY 1",
-                        bars=True,
-                        unit="percent",
-                    ),
-                    series(
-                        "Day strain",
-                        "SELECT local_date::timestamp AS time, day_strain AS strain FROM daily_outcomes "
-                        "WHERE day_strain IS NOT NULL AND $__timeFilter(local_date::timestamp) ORDER BY 1",
-                        bars=True,
-                    ),
-                ],
-            ),
-            (
-                8,
-                [
-                    series(
-                        "HRV (ms): WHOOP and band. Different definitions: compare trends, not values",
+                        "HRV (ms). WHOOP defines it differently: compare trends, not values",
                         both("hrv_rmssd_milli", "rmssd_sleep_ms"),
                         unit="ms",
                     ),
                     series(
-                        "Resting heart rate (bpm): WHOOP and band (sleep median)",
+                        "Resting heart rate (bpm); band: median over the sleep period",
                         both("resting_heart_rate", "resting_hr_median"),
                     ),
                 ],
@@ -570,18 +568,13 @@ HOME = dashboard(
                 8,
                 [
                     series(
-                        "Sleep (hours): asleep and deep",
-                        f'SELECT {WAKE} AS time, asleep_minutes / 60.0 AS "asleep", '
-                        'deep_sleep_minutes / 60.0 AS "deep" FROM daily_outcomes '
-                        f"WHERE outcome_sleep_id IS NOT NULL AND $__timeFilter({WAKE}) ORDER BY 1",
+                        "Sleep (hours): band sleep period; WHOOP time asleep",
+                        both("asleep_minutes / 60.0", BAND_SLEEP_HOURS),
                         unit="h",
                     ),
                     series(
-                        "Sleep performance (%)",
-                        f"SELECT {WAKE} AS time, sleep_performance_percentage AS performance "
-                        f"FROM daily_outcomes WHERE sleep_performance_percentage IS NOT NULL "
-                        f"AND $__timeFilter({WAKE}) ORDER BY 1",
-                        unit="percent",
+                        "Respiratory rate (breaths per minute)",
+                        both("respiratory_rate", "respiratory_rate"),
                     ),
                 ],
             ),
@@ -589,13 +582,13 @@ HOME = dashboard(
                 8,
                 [
                     series(
-                        "Steps per day (band)",
+                        "Steps per day",
                         f"SELECT {LOCAL_DAY} AS time, sum(steps) AS steps "
                         f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
                         bars=True,
                     ),
                     series(
-                        "Active minutes per day (band: walking or running)",
+                        "Active minutes per day (walking or running)",
                         f"SELECT {LOCAL_DAY} AS time, sum(seconds_walk) / 60.0 AS walking, "
                         "sum(seconds_run) / 60.0 AS running "
                         f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
@@ -608,11 +601,11 @@ HOME = dashboard(
                 8,
                 [
                     series(
-                        "Respiratory rate (breaths per minute): WHOOP and band",
-                        both("respiratory_rate", "respiratory_rate"),
+                        "Skin temperature overnight (C)",
+                        both("skin_temp_celsius", "skin_temp_mean_c"),
                     ),
                     series(
-                        "Blood oxygen (%): WHOOP and band (band field disputed between sources)",
+                        "Blood oxygen (%); the band field is disputed between sources",
                         both("spo2_percentage", "spo2_mean"),
                     ),
                 ],
@@ -621,14 +614,24 @@ HOME = dashboard(
                 8,
                 [
                     series(
-                        "Skin temperature overnight (C): WHOOP and band",
-                        both("skin_temp_celsius", "skin_temp_mean_c"),
+                        "WHOOP recovery (%), until the subscription ends",
+                        f"SELECT {WAKE} AS time, recovery_score AS recovery FROM daily_outcomes "
+                        f"WHERE outcome_scored AND $__timeFilter({WAKE}) ORDER BY 1",
+                        bars=True,
+                        unit="percent",
                     ),
                     series(
-                        "Workout minutes per day (WHOOP)",
-                        "SELECT local_date::timestamp AS time, workout_minutes AS workouts "
-                        "FROM daily_outcomes WHERE $__timeFilter(local_date::timestamp) ORDER BY 1",
+                        "WHOOP day strain, until the subscription ends",
+                        "SELECT local_date::timestamp AS time, day_strain AS strain FROM daily_outcomes "
+                        "WHERE day_strain IS NOT NULL AND $__timeFilter(local_date::timestamp) ORDER BY 1",
                         bars=True,
+                    ),
+                    series(
+                        "WHOOP sleep performance (%), until the subscription ends",
+                        f"SELECT {WAKE} AS time, sleep_performance_percentage AS performance "
+                        f"FROM daily_outcomes WHERE sleep_performance_percentage IS NOT NULL "
+                        f"AND $__timeFilter({WAKE}) ORDER BY 1",
+                        unit="percent",
                     ),
                 ],
             ),

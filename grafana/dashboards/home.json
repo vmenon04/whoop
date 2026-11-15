@@ -42,7 +42,7 @@
   "panels": [
     {
       "type": "stat",
-      "title": "Recovery (WHOOP)",
+      "title": "HRV last night (ms)",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -53,7 +53,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT recovery_score FROM daily_outcomes WHERE outcome_scored AND recovery_score IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "rawSql": "SELECT rmssd_sleep_ms FROM ble_nights WHERE metrics_version = 'ble-nightly-2' ORDER BY wake_date DESC LIMIT 1",
           "format": "table",
           "rawQuery": true,
           "refId": "A"
@@ -61,7 +61,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "ms",
           "decimals": 0,
           "noValue": "none",
           "thresholds": {
@@ -69,15 +69,7 @@
             "steps": [
               {
                 "value": null,
-                "color": "red"
-              },
-              {
-                "value": 34,
-                "color": "yellow"
-              },
-              {
-                "value": 67,
-                "color": "green"
+                "color": "text"
               }
             ]
           }
@@ -105,7 +97,7 @@
     },
     {
       "type": "stat",
-      "title": "HRV last night (WHOOP)",
+      "title": "Resting heart rate last night",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -116,7 +108,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT hrv_rmssd_milli FROM daily_outcomes WHERE outcome_scored AND hrv_rmssd_milli IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "rawSql": "SELECT resting_hr_median FROM ble_nights WHERE metrics_version = 'ble-nightly-2' ORDER BY wake_date DESC LIMIT 1",
           "format": "table",
           "rawQuery": true,
           "refId": "A"
@@ -124,7 +116,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms",
+          "unit": "none",
           "decimals": 0,
           "noValue": "none",
           "thresholds": {
@@ -160,7 +152,7 @@
     },
     {
       "type": "stat",
-      "title": "Resting heart rate",
+      "title": "Sleep period last night (h)",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -171,7 +163,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT resting_heart_rate FROM daily_outcomes WHERE outcome_scored AND resting_heart_rate IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "rawSql": "SELECT extract(epoch FROM sleep_end - sleep_start) / 3600 FROM ble_nights WHERE metrics_version = 'ble-nightly-2' ORDER BY wake_date DESC LIMIT 1",
           "format": "table",
           "rawQuery": true,
           "refId": "A"
@@ -179,8 +171,8 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
-          "decimals": 0,
+          "unit": "h",
+          "decimals": 1,
           "noValue": "none",
           "thresholds": {
             "mode": "absolute",
@@ -215,7 +207,7 @@
     },
     {
       "type": "stat",
-      "title": "Asleep last night (h)",
+      "title": "Respiratory rate last night",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -226,62 +218,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT asleep_minutes / 60.0 FROM daily_outcomes WHERE outcome_sleep_id IS NOT NULL AND asleep_minutes / 60.0 IS NOT NULL ORDER BY local_date DESC LIMIT 1",
-          "format": "table",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "h",
-          "decimals": 1,
-          "noValue": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "value": null,
-                "color": "text"
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        }
-      },
-      "id": 4,
-      "gridPos": {
-        "h": 4,
-        "w": 4,
-        "x": 12,
-        "y": 0
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Strain, latest day",
-      "datasource": {
-        "type": "postgres",
-        "uid": "whoop-pg"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "whoop-pg"
-          },
-          "rawSql": "SELECT day_strain FROM daily_outcomes WHERE TRUE AND day_strain IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "rawSql": "SELECT respiratory_rate FROM ble_nights WHERE metrics_version = 'ble-nightly-2' ORDER BY wake_date DESC LIMIT 1",
           "format": "table",
           "rawQuery": true,
           "refId": "A"
@@ -315,11 +252,11 @@
           "values": false
         }
       },
-      "id": 5,
+      "id": 4,
       "gridPos": {
         "h": 4,
         "w": 4,
-        "x": 16,
+        "x": 12,
         "y": 0
       }
     },
@@ -370,6 +307,69 @@
           "values": false
         }
       },
+      "id": 5,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Days since the last band sync",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT current_date - max(wake_date) FROM ble_nights WHERE metrics_version = 'ble-nightly-2'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 2,
+                "color": "orange"
+              },
+              {
+                "value": 4,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
       "id": 6,
       "gridPos": {
         "h": 4,
@@ -380,7 +380,7 @@
     },
     {
       "type": "state-timeline",
-      "title": "Last 48 hours: asleep, still, awake, up (band)",
+      "title": "Last 48 hours: asleep, still, awake, up",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -599,7 +599,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Recovery (%)",
+      "title": "HRV (ms). WHOOP defines it differently: compare trends, not values",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -610,7 +610,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, recovery_score AS recovery FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "rawSql": "SELECT wake_date::timestamp AS time, 'Band (ble-nightly-2)' AS metric, rmssd_sleep_ms AS value FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND rmssd_sleep_ms IS NOT NULL UNION ALL SELECT (local_date + 1)::timestamp, 'WHOOP', hrv_rmssd_milli FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND hrv_rmssd_milli IS NOT NULL ORDER BY 1",
           "format": "time_series",
           "rawQuery": true,
           "refId": "A"
@@ -618,11 +618,11 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "ms",
           "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 60,
-            "showPoints": "never",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
             "pointSize": 4,
             "spanNulls": false
           }
@@ -645,7 +645,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Day strain",
+      "title": "Resting heart rate (bpm); band: median over the sleep period",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -656,7 +656,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT local_date::timestamp AS time, day_strain AS strain FROM daily_outcomes WHERE day_strain IS NOT NULL AND $__timeFilter(local_date::timestamp) ORDER BY 1",
+          "rawSql": "SELECT wake_date::timestamp AS time, 'Band (ble-nightly-2)' AS metric, resting_hr_median AS value FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND resting_hr_median IS NOT NULL UNION ALL SELECT (local_date + 1)::timestamp, 'WHOOP', resting_heart_rate FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND resting_heart_rate IS NOT NULL ORDER BY 1",
           "format": "time_series",
           "rawQuery": true,
           "refId": "A"
@@ -666,9 +666,9 @@
         "defaults": {
           "unit": "none",
           "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 60,
-            "showPoints": "never",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
             "pointSize": 4,
             "spanNulls": false
           }
@@ -691,7 +691,7 @@
     },
     {
       "type": "timeseries",
-      "title": "HRV (ms): WHOOP and band. Different definitions: compare trends, not values",
+      "title": "Sleep (hours): band sleep period; WHOOP time asleep",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -702,7 +702,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, hrv_rmssd_milli AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND hrv_rmssd_milli IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', rmssd_sleep_ms FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND rmssd_sleep_ms IS NOT NULL ORDER BY 1",
+          "rawSql": "SELECT wake_date::timestamp AS time, 'Band (ble-nightly-2)' AS metric, extract(epoch FROM sleep_end - sleep_start) / 3600 AS value FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND extract(epoch FROM sleep_end - sleep_start) / 3600 IS NOT NULL UNION ALL SELECT (local_date + 1)::timestamp, 'WHOOP', asleep_minutes / 60.0 FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND asleep_minutes / 60.0 IS NOT NULL ORDER BY 1",
           "format": "time_series",
           "rawQuery": true,
           "refId": "A"
@@ -710,7 +710,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "ms",
+          "unit": "h",
           "custom": {
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -737,7 +737,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Resting heart rate (bpm): WHOOP and band (sleep median)",
+      "title": "Respiratory rate (breaths per minute)",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -748,7 +748,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, resting_heart_rate AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND resting_heart_rate IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', resting_hr_median FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND resting_hr_median IS NOT NULL ORDER BY 1",
+          "rawSql": "SELECT wake_date::timestamp AS time, 'Band (ble-nightly-2)' AS metric, respiratory_rate AS value FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND respiratory_rate IS NOT NULL UNION ALL SELECT (local_date + 1)::timestamp, 'WHOOP', respiratory_rate FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND respiratory_rate IS NOT NULL ORDER BY 1",
           "format": "time_series",
           "rawQuery": true,
           "refId": "A"
@@ -783,99 +783,7 @@
     },
     {
       "type": "timeseries",
-      "title": "Sleep (hours): asleep and deep",
-      "datasource": {
-        "type": "postgres",
-        "uid": "whoop-pg"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "whoop-pg"
-          },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, asleep_minutes / 60.0 AS \"asleep\", deep_sleep_minutes / 60.0 AS \"deep\" FROM daily_outcomes WHERE outcome_sleep_id IS NOT NULL AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "h",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "id": 15,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 39
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Sleep performance (%)",
-      "datasource": {
-        "type": "postgres",
-        "uid": "whoop-pg"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "whoop-pg"
-          },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, sleep_performance_percentage AS performance FROM daily_outcomes WHERE sleep_performance_percentage IS NOT NULL AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "id": 16,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 39
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Steps per day (band)",
+      "title": "Steps per day",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -911,17 +819,17 @@
           "placement": "bottom"
         }
       },
-      "id": 17,
+      "id": 15,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 47
+        "y": 39
       }
     },
     {
       "type": "timeseries",
-      "title": "Active minutes per day (band: walking or running)",
+      "title": "Active minutes per day (walking or running)",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -960,17 +868,17 @@
           "placement": "bottom"
         }
       },
-      "id": 18,
+      "id": 16,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 47
+        "y": 39
       }
     },
     {
       "type": "timeseries",
-      "title": "Respiratory rate (breaths per minute): WHOOP and band",
+      "title": "Skin temperature overnight (C)",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -981,7 +889,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, respiratory_rate AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND respiratory_rate IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', respiratory_rate FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND respiratory_rate IS NOT NULL ORDER BY 1",
+          "rawSql": "SELECT wake_date::timestamp AS time, 'Band (ble-nightly-2)' AS metric, skin_temp_mean_c AS value FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND skin_temp_mean_c IS NOT NULL UNION ALL SELECT (local_date + 1)::timestamp, 'WHOOP', skin_temp_celsius FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND skin_temp_celsius IS NOT NULL ORDER BY 1",
           "format": "time_series",
           "rawQuery": true,
           "refId": "A"
@@ -994,6 +902,98 @@
             "drawStyle": "line",
             "fillOpacity": 0,
             "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Blood oxygen (%); the band field is disputed between sources",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT wake_date::timestamp AS time, 'Band (ble-nightly-2)' AS metric, spo2_mean AS value FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND spo2_mean IS NOT NULL UNION ALL SELECT (local_date + 1)::timestamp, 'WHOOP', spo2_percentage FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND spo2_percentage IS NOT NULL ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 47
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "WHOOP recovery (%), until the subscription ends",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, recovery_score AS recovery FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
             "pointSize": 4,
             "spanNulls": false
           }
@@ -1009,14 +1009,14 @@
       "id": 19,
       "gridPos": {
         "h": 8,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 55
       }
     },
     {
       "type": "timeseries",
-      "title": "Blood oxygen (%): WHOOP and band (band field disputed between sources)",
+      "title": "WHOOP day strain, until the subscription ends",
       "datasource": {
         "type": "postgres",
         "uid": "whoop-pg"
@@ -1027,99 +1027,7 @@
             "type": "postgres",
             "uid": "whoop-pg"
           },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, spo2_percentage AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND spo2_percentage IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', spo2_mean FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND spo2_mean IS NOT NULL ORDER BY 1",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "id": 20,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 55
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Skin temperature overnight (C): WHOOP and band",
-      "datasource": {
-        "type": "postgres",
-        "uid": "whoop-pg"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "whoop-pg"
-          },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, skin_temp_celsius AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND skin_temp_celsius IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', skin_temp_mean_c FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND skin_temp_mean_c IS NOT NULL ORDER BY 1",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "id": 21,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 63
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Workout minutes per day (WHOOP)",
-      "datasource": {
-        "type": "postgres",
-        "uid": "whoop-pg"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "whoop-pg"
-          },
-          "rawSql": "SELECT local_date::timestamp AS time, workout_minutes AS workouts FROM daily_outcomes WHERE $__timeFilter(local_date::timestamp) ORDER BY 1",
+          "rawSql": "SELECT local_date::timestamp AS time, day_strain AS strain FROM daily_outcomes WHERE day_strain IS NOT NULL AND $__timeFilter(local_date::timestamp) ORDER BY 1",
           "format": "time_series",
           "rawQuery": true,
           "refId": "A"
@@ -1144,12 +1052,58 @@
           "placement": "bottom"
         }
       },
-      "id": 22,
+      "id": 20,
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 63
+        "w": 8,
+        "x": 8,
+        "y": 55
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "WHOOP sleep performance (%), until the subscription ends",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, sleep_performance_percentage AS performance FROM daily_outcomes WHERE sleep_performance_percentage IS NOT NULL AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 55
       }
     }
   ]
