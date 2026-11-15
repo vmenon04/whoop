@@ -363,98 +363,6 @@
       }
     },
     {
-      "type": "timeseries",
-      "title": "Nightly HRV (ms)",
-      "datasource": {
-        "type": "postgres",
-        "uid": "whoop-pg"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "whoop-pg"
-          },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, hrv_rmssd_milli AS hrv FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "id": 7,
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 11
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "Resting heart rate (bpm)",
-      "datasource": {
-        "type": "postgres",
-        "uid": "whoop-pg"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "whoop-pg"
-          },
-          "rawSql": "SELECT (local_date + 1)::timestamp AS time, resting_heart_rate AS rhr FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
-          "format": "time_series",
-          "rawQuery": true,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "showPoints": "always",
-            "pointSize": 4,
-            "spanNulls": false
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        }
-      },
-      "id": 8,
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 11
-      }
-    },
-    {
       "type": "table",
       "title": "Recent syncs",
       "datasource": {
@@ -480,12 +388,12 @@
       "options": {
         "cellHeight": "sm"
       },
-      "id": 9,
+      "id": 7,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 11
       }
     },
     {
@@ -514,12 +422,12 @@
       "options": {
         "cellHeight": "sm"
       },
-      "id": 10,
+      "id": 8,
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 11
       }
     },
     {
@@ -548,12 +456,415 @@
       "options": {
         "cellHeight": "sm"
       },
-      "id": 11,
+      "id": 9,
       "gridPos": {
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 19
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Days since the last band night",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT current_date - max(wake_date) FROM ble_nights WHERE metrics_version = 'ble-nightly-2'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 2,
+                "color": "orange"
+              },
+              {
+                "value": 4,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 25
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Beats corrected, last band night (over 5% = poor)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT rr_corrected_share FROM ble_nights WHERE metrics_version = 'ble-nightly-2' ORDER BY wake_date DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 0.05,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 25
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Hours since the newest band record",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT extract(epoch FROM now() - max(minute)) / 3600 FROM ble_minutes WHERE minutes_version = 'ble-minutes-1'",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 30,
+                "color": "orange"
+              },
+              {
+                "value": 54,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 25
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Share of each day the band recorded",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date::timestamp AS time, sum(seconds_recorded) / 86400.0 AS recorded FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Beats corrected per night (over 5% = poor HRV quality)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT wake_date::timestamp AS time, rr_corrected_share AS corrected FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Average heart rate per WHOOP cycle: WHOOP vs band (cycles the band covered 95%+)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT c.start AS time, 'WHOOP' AS metric, c.average_heart_rate AS value FROM cycles c WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) AND c.average_heart_rate IS NOT NULL AND c.\"end\" IS NOT NULL AND (SELECT sum(seconds_recorded) FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND minute >= c.start AND minute < c.\"end\") >= 0.95 * extract(epoch FROM c.\"end\" - c.start) UNION ALL SELECT c.start AS time, 'Band' AS metric, sum(m.hr_mean * m.seconds_with_hr) / nullif(sum(m.seconds_with_hr), 0) AS value FROM cycles c JOIN ble_minutes m ON m.minutes_version = 'ble-minutes-1' AND m.minute >= c.start AND m.minute < c.\"end\" WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) GROUP BY c.id, c.start, c.\"end\" HAVING sum(m.seconds_recorded) >= 0.95 * extract(epoch FROM c.\"end\" - c.start) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Steps per WHOOP cycle: WHOOP vs the band's two counters (95%+ covered)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT c.start AS time, 'WHOOP' AS metric, c.step_count AS value FROM cycles c WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) AND c.step_count IS NOT NULL AND c.\"end\" IS NOT NULL AND (SELECT sum(seconds_recorded) FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND minute >= c.start AND minute < c.\"end\") >= 0.95 * extract(epoch FROM c.\"end\" - c.start) UNION ALL SELECT c.start AS time, 'Band step_counter' AS metric, sum(m.steps) AS value FROM cycles c JOIN ble_minutes m ON m.minutes_version = 'ble-minutes-1' AND m.minute >= c.start AND m.minute < c.\"end\" WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) GROUP BY c.id, c.start, c.\"end\" HAVING sum(m.seconds_recorded) >= 0.95 * extract(epoch FROM c.\"end\" - c.start) UNION ALL SELECT c.start AS time, 'Band hw_step_counter' AS metric, sum(m.steps_hw) AS value FROM cycles c JOIN ble_minutes m ON m.minutes_version = 'ble-minutes-1' AND m.minute >= c.start AND m.minute < c.\"end\" WHERE c.deleted_at IS NULL AND c.score_state = 'SCORED' AND $__timeFilter(c.start) GROUP BY c.id, c.start, c.\"end\" HAVING sum(m.seconds_recorded) >= 0.95 * extract(epoch FROM c.\"end\" - c.start) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "points",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 8,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      }
+    },
+    {
+      "type": "table",
+      "title": "Band nights",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT wake_date, sleep_start, sleep_end, round(rr_coverage::numeric, 3) AS rr_coverage, round(rr_corrected_share::numeric, 3) AS corrected, rr_quality_ok, round(rmssd_sleep_ms::numeric, 1) AS rmssd_sleep, round(rmssd_fixed_ms::numeric, 1) AS rmssd_02_06, round(resting_hr_median::numeric, 1) AS resting_hr, round(respiratory_rate::numeric, 1) AS resp_rate, respiratory_windows, round(spo2_mean::numeric, 1) AS spo2, round(skin_temp_mean_c::numeric, 2) AS skin_temp, decoder_version, computed_at FROM ble_nights WHERE metrics_version = 'ble-nightly-2' ORDER BY wake_date DESC LIMIT 30",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm"
+      },
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 45
       }
     }
   ]

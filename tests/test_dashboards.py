@@ -118,8 +118,8 @@ async def test_cycle_comparison_pairs_only_cycles_the_band_covered(
             {"version": MINUTES_VERSION},
         )
     async with session_factory() as session:
-        heart_sql = panel_sql("nightly-health.json", "Average heart rate")
-        steps_sql = panel_sql("nightly-health.json", "Steps per WHOOP")
+        heart_sql = panel_sql("data-health.json", "Average heart rate per WHOOP cycle")
+        steps_sql = panel_sql("data-health.json", "Steps per WHOOP cycle")
         heart = (await session.execute(text(heart_sql))).all()
         steps = (await session.execute(text(steps_sql))).all()
     assert sorted((metric, value) for _, metric, value in heart) == [("Band", 62.0), ("WHOOP", 60)]

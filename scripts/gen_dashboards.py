@@ -23,7 +23,12 @@ def target(sql: str, fmt: str = "table") -> dict[str, Any]:
 
 
 def stat(
-    title: str, sql: str, *, unit: str = "none", steps: list[tuple[float | None, str]]
+    title: str,
+    sql: str,
+    *,
+    unit: str = "none",
+    steps: list[tuple[float | None, str]],
+    decimals: int = 0,
 ) -> Panel:
     return {
         "type": "stat",
@@ -33,7 +38,7 @@ def stat(
         "fieldConfig": {
             "defaults": {
                 "unit": unit,
-                "decimals": 0,
+                "decimals": decimals,
                 "noValue": "none",
                 "thresholds": {
                     "mode": "absolute",
@@ -166,114 +171,90 @@ def dashboard(
 
 OK_THEN_BAD = [(None, "green"), (1, "orange"), (5, "red")]
 
-DATA_HEALTH = dashboard(
-    "whoop-data-health",
-    "Data health",
-    layout(
+# WHOOP API ingestion: is data arriving and being processed?
+PIPELINE_ROWS: list[tuple[int, list[Panel]]] = [
+    (
+        4,
         [
-            (
-                4,
-                [
-                    stat(
-                        "Hours since last scored recovery",
-                        "SELECT extract(epoch FROM now() - max(outcome_sleep_end)) / 3600 "
-                        "FROM daily_outcomes WHERE outcome_scored",
-                        unit="h",
-                        steps=[(None, "green"), (30, "orange"), (40, "red")],
-                    ),
-                    stat(
-                        "Hours since last clean sync",
-                        "SELECT extract(epoch FROM now() - max(finished_at)) / 3600 "
-                        "FROM sync_runs WHERE error IS NULL AND finished_at IS NOT NULL",
-                        unit="h",
-                        steps=[(None, "green"), (4, "orange"), (8, "red")],
-                    ),
-                    stat(
-                        "Webhook events waiting",
-                        "SELECT count(*) FROM webhook_events WHERE status = 'pending'",
-                        steps=OK_THEN_BAD,
-                    ),
-                    stat(
-                        "Webhook events failed",
-                        "SELECT count(*) FROM webhook_events WHERE status = 'failed'",
-                        steps=[(None, "green"), (1, "red")],
-                    ),
-                ],
+            stat(
+                "Hours since last scored recovery",
+                "SELECT extract(epoch FROM now() - max(outcome_sleep_end)) / 3600 "
+                "FROM daily_outcomes WHERE outcome_scored",
+                unit="h",
+                steps=[(None, "green"), (30, "orange"), (40, "red")],
             ),
-            (
-                7,
-                [
-                    series(
-                        "Mornings with a scored recovery (1 = yes)",
-                        "SELECT (local_date + 1)::timestamp AS time, outcome_scored::int AS scored "
-                        "FROM daily_outcomes "
-                        "WHERE $__timeFilter((local_date + 1)::timestamp) "
-                        "AND local_date < (now() AT TIME ZONE (SELECT local_timezone FROM app_config))::date "
-                        "ORDER BY 1",
-                        bars=True,
-                    ),
-                    series(
-                        "Webhook events per day",
-                        "SELECT date_trunc('day', received_at) AS time, type AS metric, count(*) AS events "
-                        "FROM webhook_events WHERE $__timeFilter(received_at) GROUP BY 1, 2 ORDER BY 1",
-                        bars=True,
-                        stacking={"mode": "normal"},
-                    ),
-                ],
+            stat(
+                "Hours since last clean sync",
+                "SELECT extract(epoch FROM now() - max(finished_at)) / 3600 "
+                "FROM sync_runs WHERE error IS NULL AND finished_at IS NOT NULL",
+                unit="h",
+                steps=[(None, "green"), (4, "orange"), (8, "red")],
             ),
-            (
-                7,
-                [
-                    series(
-                        "Nightly HRV (ms)",
-                        "SELECT (local_date + 1)::timestamp AS time, hrv_rmssd_milli AS hrv "
-                        "FROM daily_outcomes WHERE outcome_scored "
-                        "AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
-                        unit="ms",
-                    ),
-                    series(
-                        "Resting heart rate (bpm)",
-                        "SELECT (local_date + 1)::timestamp AS time, resting_heart_rate AS rhr "
-                        "FROM daily_outcomes WHERE outcome_scored "
-                        "AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
-                    ),
-                ],
+            stat(
+                "Webhook events waiting",
+                "SELECT count(*) FROM webhook_events WHERE status = 'pending'",
+                steps=OK_THEN_BAD,
             ),
-            (
-                8,
-                [
-                    table(
-                        "Recent syncs",
-                        "SELECT started_at, kind, rows_upserted, rows_deleted, "
-                        "round(extract(epoch FROM finished_at - started_at)) AS seconds, error "
-                        "FROM sync_runs ORDER BY id DESC LIMIT 15",
-                    ),
-                    table(
-                        "Rows by score state",
-                        "SELECT 'cycles' AS record, score_state, count(*) AS rows FROM cycles GROUP BY 2 "
-                        "UNION ALL SELECT 'sleeps', score_state, count(*) FROM sleeps "
-                        "WHERE deleted_at IS NULL GROUP BY 2 "
-                        "UNION ALL SELECT 'recoveries', score_state, count(*) FROM recoveries "
-                        "WHERE deleted_at IS NULL GROUP BY 2 "
-                        "UNION ALL SELECT 'workouts', score_state, count(*) FROM workouts "
-                        "WHERE deleted_at IS NULL GROUP BY 2 ORDER BY 1, 2",
-                    ),
-                ],
+            stat(
+                "Webhook events failed",
+                "SELECT count(*) FROM webhook_events WHERE status = 'failed'",
+                steps=[(None, "green"), (1, "red")],
             ),
-            (
-                6,
-                [
-                    table(
-                        "Webhook events that failed or are retrying",
-                        "SELECT received_at, type, resource_id, status, attempts, error "
-                        "FROM webhook_events WHERE status <> 'done' ORDER BY received_at DESC LIMIT 20",
-                    )
-                ],
-            ),
-        ]
+        ],
     ),
-    days=30,
-)
+    (
+        7,
+        [
+            series(
+                "Mornings with a scored recovery (1 = yes)",
+                "SELECT (local_date + 1)::timestamp AS time, outcome_scored::int AS scored "
+                "FROM daily_outcomes "
+                "WHERE $__timeFilter((local_date + 1)::timestamp) "
+                "AND local_date < (now() AT TIME ZONE (SELECT local_timezone FROM app_config))::date "
+                "ORDER BY 1",
+                bars=True,
+            ),
+            series(
+                "Webhook events per day",
+                "SELECT date_trunc('day', received_at) AS time, type AS metric, count(*) AS events "
+                "FROM webhook_events WHERE $__timeFilter(received_at) GROUP BY 1, 2 ORDER BY 1",
+                bars=True,
+                stacking={"mode": "normal"},
+            ),
+        ],
+    ),
+    (
+        8,
+        [
+            table(
+                "Recent syncs",
+                "SELECT started_at, kind, rows_upserted, rows_deleted, "
+                "round(extract(epoch FROM finished_at - started_at)) AS seconds, error "
+                "FROM sync_runs ORDER BY id DESC LIMIT 15",
+            ),
+            table(
+                "Rows by score state",
+                "SELECT 'cycles' AS record, score_state, count(*) AS rows FROM cycles GROUP BY 2 "
+                "UNION ALL SELECT 'sleeps', score_state, count(*) FROM sleeps "
+                "WHERE deleted_at IS NULL GROUP BY 2 "
+                "UNION ALL SELECT 'recoveries', score_state, count(*) FROM recoveries "
+                "WHERE deleted_at IS NULL GROUP BY 2 "
+                "UNION ALL SELECT 'workouts', score_state, count(*) FROM workouts "
+                "WHERE deleted_at IS NULL GROUP BY 2 ORDER BY 1, 2",
+            ),
+        ],
+    ),
+    (
+        6,
+        [
+            table(
+                "Webhook events that failed or are retrying",
+                "SELECT received_at, type, resource_id, status, attempts, error "
+                "FROM webhook_events WHERE status <> 'done' ORDER BY received_at DESC LIMIT 20",
+            )
+        ],
+    ),
+]
 
 # `experiment_id::text = '${experiment}'` stays valid SQL when no experiment exists yet.
 THIS = "experiment_id::text = '${experiment}'"
@@ -442,37 +423,114 @@ def both(whoop_column: str, band_column: str) -> str:
     )
 
 
-NIGHTLY_HEALTH = dashboard(
-    "whoop-nightly-health",
-    "Nightly health",
+def last_days(panel: Panel, days: int = 2) -> Panel:
+    """Show this panel over the last `days` days, whatever the dashboard's range."""
+    return panel | {"timeFrom": f"{days}d"}
+
+
+def latest(column: str, where: str = "outcome_scored") -> str:
+    return (
+        f"SELECT {column} FROM daily_outcomes WHERE {where} AND {column} IS NOT NULL "
+        "ORDER BY local_date DESC LIMIT 1"
+    )
+
+
+TODAY = "(now() AT TIME ZONE (SELECT local_timezone FROM app_config))::date"
+WORKOUTS = annotation(
+    "WHOOP workouts",
+    'SELECT start AS time, "end" AS timeend, sport_name AS text FROM workouts '
+    "WHERE deleted_at IS NULL AND $__timeFilter(start)",
+    "orange",
+)
+TEXT = [(None, "text")]
+
+HOME = dashboard(
+    "whoop-home",
+    "Health",
     layout(
         [
             (
                 4,
                 [
                     stat(
-                        "Days since the last band night",
-                        f"SELECT current_date - max(wake_date) FROM {BAND}",
-                        steps=[(None, "green"), (2, "orange"), (4, "red")],
+                        "Recovery (WHOOP)",
+                        latest("recovery_score"),
+                        unit="percent",
+                        steps=[(None, "red"), (34, "yellow"), (67, "green")],
                     ),
                     stat(
-                        "Beats corrected, last band night (over 5% = poor)",
-                        f"SELECT rr_corrected_share FROM {BAND} ORDER BY wake_date DESC LIMIT 1",
-                        unit="percentunit",
-                        steps=[(None, "green"), (0.05, "red")],
+                        "HRV last night (WHOOP)", latest("hrv_rmssd_milli"), unit="ms", steps=TEXT
+                    ),
+                    stat("Resting heart rate", latest("resting_heart_rate"), steps=TEXT),
+                    stat(
+                        "Asleep last night (h)",
+                        latest("asleep_minutes / 60.0", "outcome_sleep_id IS NOT NULL"),
+                        unit="h",
+                        steps=TEXT,
+                        decimals=1,
                     ),
                     stat(
-                        "HRV last night, WHOOP (ms)",
-                        "SELECT hrv_rmssd_milli FROM daily_outcomes WHERE outcome_scored "
-                        "ORDER BY local_date DESC LIMIT 1",
-                        unit="ms",
-                        steps=[(None, "text")],
+                        "Strain, latest day", latest("day_strain", "TRUE"), steps=TEXT, decimals=1
                     ),
                     stat(
-                        "HRV last night, band (ms)",
-                        f"SELECT rmssd_sleep_ms FROM {BAND} ORDER BY wake_date DESC LIMIT 1",
-                        unit="ms",
-                        steps=[(None, "text")],
+                        "Steps today, to the last band sync",
+                        f"SELECT coalesce(sum(steps), 0) FROM {MINUTES} "
+                        f"AND (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date = {TODAY}",
+                        steps=TEXT,
+                    ),
+                ],
+            ),
+            (
+                4,
+                [
+                    last_days(
+                        state_timeline(
+                            "Last 48 hours: asleep, still, awake, up (band)",
+                            f"SELECT minute AS time, band_state AS state FROM {MINUTES} "
+                            "AND $__timeFilter(minute) ORDER BY 1",
+                            {
+                                "SLEEP": "dark-blue",
+                                "STILL": "light-blue",
+                                "WAKE": "green",
+                                "UP": "orange",
+                            },
+                        )
+                    )
+                ],
+            ),
+            (
+                8,
+                [
+                    last_days(
+                        series(
+                            "Last 48 hours: heart rate per minute (bpm)",
+                            'SELECT minute AS time, hr_mean AS "mean", hr_min AS "min", hr_max AS "max" '
+                            f"FROM {MINUTES} AND $__timeFilter(minute) ORDER BY 1",
+                            **GAPS,
+                        )
+                    )
+                ],
+            ),
+            (
+                7,
+                [
+                    last_days(
+                        series(
+                            "Last 48 hours: minutes walking and running, per 15 minutes",
+                            "SELECT date_bin('15 minutes', minute, TIMESTAMPTZ '2000-01-01') AS time, "
+                            "sum(seconds_walk) / 60.0 AS walking, sum(seconds_run) / 60.0 AS running "
+                            f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+                            bars=True,
+                            stacking={"mode": "normal"},
+                        )
+                    ),
+                    last_days(
+                        series(
+                            "Last 48 hours: skin temperature (C)",
+                            f"SELECT minute AS time, skin_temp_c AS skin FROM {MINUTES} "
+                            "AND $__timeFilter(minute) ORDER BY 1",
+                            **GAPS,
+                        )
                     ),
                 ],
             ),
@@ -480,12 +538,30 @@ NIGHTLY_HEALTH = dashboard(
                 8,
                 [
                     series(
-                        "HRV, RMSSD over the night (ms). Different definitions: compare trends, not values",
+                        "Recovery (%)",
+                        f"SELECT {WAKE} AS time, recovery_score AS recovery FROM daily_outcomes "
+                        f"WHERE outcome_scored AND $__timeFilter({WAKE}) ORDER BY 1",
+                        bars=True,
+                        unit="percent",
+                    ),
+                    series(
+                        "Day strain",
+                        "SELECT local_date::timestamp AS time, day_strain AS strain FROM daily_outcomes "
+                        "WHERE day_strain IS NOT NULL AND $__timeFilter(local_date::timestamp) ORDER BY 1",
+                        bars=True,
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "HRV (ms): WHOOP and band. Different definitions: compare trends, not values",
                         both("hrv_rmssd_milli", "rmssd_sleep_ms"),
                         unit="ms",
                     ),
                     series(
-                        "Resting heart rate (bpm); band: median over the sleep window",
+                        "Resting heart rate (bpm): WHOOP and band (sleep median)",
                         both("resting_heart_rate", "resting_hr_median"),
                     ),
                 ],
@@ -494,28 +570,18 @@ NIGHTLY_HEALTH = dashboard(
                 8,
                 [
                     series(
-                        "Respiratory rate (breaths per minute)",
-                        both("respiratory_rate", "respiratory_rate"),
+                        "Sleep (hours): asleep and deep",
+                        f'SELECT {WAKE} AS time, asleep_minutes / 60.0 AS "asleep", '
+                        'deep_sleep_minutes / 60.0 AS "deep" FROM daily_outcomes '
+                        f"WHERE outcome_sleep_id IS NOT NULL AND $__timeFilter({WAKE}) ORDER BY 1",
+                        unit="h",
                     ),
                     series(
-                        "Blood oxygen (%); band field disputed between sources",
-                        both("spo2_percentage", "spo2_mean"),
-                    ),
-                ],
-            ),
-            (
-                8,
-                [
-                    series(
-                        "Skin temperature (C)",
-                        both("skin_temp_celsius", "skin_temp_mean_c"),
-                    ),
-                    series(
-                        "Beats corrected per night (over 5% = poor HRV quality)",
-                        f"SELECT wake_date::timestamp AS time, rr_corrected_share AS corrected "
-                        f"FROM {BAND} AND $__timeFilter(wake_date::timestamp) ORDER BY 1",
-                        bars=True,
-                        unit="percentunit",
+                        "Sleep performance (%)",
+                        f"SELECT {WAKE} AS time, sleep_performance_percentage AS performance "
+                        f"FROM daily_outcomes WHERE sleep_performance_percentage IS NOT NULL "
+                        f"AND $__timeFilter({WAKE}) ORDER BY 1",
+                        unit="percent",
                     ),
                 ],
             ),
@@ -523,7 +589,7 @@ NIGHTLY_HEALTH = dashboard(
                 8,
                 [
                     series(
-                        "Steps per day (band counter; see the per-cycle check below)",
+                        "Steps per day (band)",
                         f"SELECT {LOCAL_DAY} AS time, sum(steps) AS steps "
                         f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
                         bars=True,
@@ -542,139 +608,140 @@ NIGHTLY_HEALTH = dashboard(
                 8,
                 [
                     series(
-                        "Average heart rate per WHOOP cycle (cycles the band covered for 95%+)",
-                        CYCLE_CHECK.format(
-                            whoop="c.average_heart_rate",
-                            band="sum(m.hr_mean * m.seconds_with_hr) / nullif(sum(m.seconds_with_hr), 0)",
-                            name="Band",
-                        )
-                        + " ORDER BY 1",
-                        drawStyle="points",
-                        pointSize=8,
+                        "Respiratory rate (breaths per minute): WHOOP and band",
+                        both("respiratory_rate", "respiratory_rate"),
                     ),
                     series(
-                        "Steps per WHOOP cycle: WHOOP vs the band's two counters (95%+ covered)",
-                        CYCLE_CHECK.format(
-                            whoop="c.step_count", band="sum(m.steps)", name="Band step_counter"
-                        )
-                        + " UNION ALL "
-                        + CYCLE_BAND.format(band="sum(m.steps_hw)", name="Band hw_step_counter")
-                        + " ORDER BY 1",
-                        drawStyle="points",
-                        pointSize=8,
+                        "Blood oxygen (%): WHOOP and band (band field disputed between sources)",
+                        both("spo2_percentage", "spo2_mean"),
                     ),
                 ],
             ),
             (
                 8,
                 [
-                    table(
-                        "Band nights",
-                        "SELECT wake_date, sleep_start, sleep_end, "
-                        "round(rr_coverage::numeric, 3) AS rr_coverage, "
-                        "round(rr_corrected_share::numeric, 3) AS corrected, rr_quality_ok, "
-                        "round(rmssd_sleep_ms::numeric, 1) AS rmssd_sleep, "
-                        "round(rmssd_fixed_ms::numeric, 1) AS rmssd_02_06, "
-                        "round(resting_hr_median::numeric, 1) AS resting_hr, "
-                        "round(respiratory_rate::numeric, 1) AS resp_rate, respiratory_windows, "
-                        "round(spo2_mean::numeric, 1) AS spo2, "
-                        "round(skin_temp_mean_c::numeric, 2) AS skin_temp, decoder_version, computed_at "
-                        f"FROM {BAND} ORDER BY wake_date DESC LIMIT 30",
-                    )
+                    series(
+                        "Skin temperature overnight (C): WHOOP and band",
+                        both("skin_temp_celsius", "skin_temp_mean_c"),
+                    ),
+                    series(
+                        "Workout minutes per day (WHOOP)",
+                        "SELECT local_date::timestamp AS time, workout_minutes AS workouts "
+                        "FROM daily_outcomes WHERE $__timeFilter(local_date::timestamp) ORDER BY 1",
+                        bars=True,
+                    ),
                 ],
             ),
         ]
     ),
     days=30,
+    annotations=[WORKOUTS],
 )
 
-DAY_VIEW = dashboard(
-    "whoop-day-view",
-    "Day view",
-    layout(
+BAND_QUALITY_ROWS: list[tuple[int, list[Panel]]] = [
+    (
+        4,
         [
-            (
-                5,
-                [
-                    state_timeline(
-                        "Band state",
-                        f"SELECT minute AS time, band_state AS state FROM {MINUTES} "
-                        "AND $__timeFilter(minute) ORDER BY 1",
-                        {
-                            "SLEEP": "dark-blue",
-                            "STILL": "light-blue",
-                            "WAKE": "green",
-                            "UP": "orange",
-                        },
-                    )
-                ],
+            stat(
+                "Days since the last band night",
+                f"SELECT current_date - max(wake_date) FROM {BAND}",
+                steps=[(None, "green"), (2, "orange"), (4, "red")],
             ),
-            (
-                9,
-                [
-                    series(
-                        "Heart rate per minute (bpm): mean, min and max",
-                        'SELECT minute AS time, hr_mean AS "mean", hr_min AS "min", hr_max AS "max" '
-                        f"FROM {MINUTES} AND $__timeFilter(minute) ORDER BY 1",
-                        **GAPS,
-                    )
-                ],
+            stat(
+                "Beats corrected, last band night (over 5% = poor)",
+                f"SELECT rr_corrected_share FROM {BAND} ORDER BY wake_date DESC LIMIT 1",
+                unit="percentunit",
+                steps=[(None, "green"), (0.05, "red")],
             ),
-            (
-                8,
-                [
-                    series(
-                        "Minutes walking and running, per 15 minutes",
-                        "SELECT date_bin('15 minutes', minute, TIMESTAMPTZ '2000-01-01') AS time, "
-                        "sum(seconds_walk) / 60.0 AS walking, sum(seconds_run) / 60.0 AS running "
-                        f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
-                        bars=True,
-                        stacking={"mode": "normal"},
-                    ),
-                    series(
-                        "Steps per hour (band counter, being checked against WHOOP)",
-                        "SELECT date_trunc('hour', minute) AS time, sum(steps) AS steps "
-                        f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
-                        bars=True,
-                    ),
-                ],
+            stat(
+                "Hours since the newest band record",
+                f"SELECT extract(epoch FROM now() - max(minute)) / 3600 FROM {MINUTES}",
+                unit="h",
+                steps=[(None, "green"), (30, "orange"), (54, "red")],
             ),
-            (
-                8,
-                [
-                    series(
-                        "Movement intensity per minute (g)",
-                        f"SELECT minute AS time, accel_mean_g AS movement FROM {MINUTES} "
-                        "AND $__timeFilter(minute) ORDER BY 1",
-                        **GAPS,
-                    ),
-                    series(
-                        "Skin temperature per minute (C)",
-                        f"SELECT minute AS time, skin_temp_c AS skin FROM {MINUTES} "
-                        "AND $__timeFilter(minute) ORDER BY 1",
-                        **GAPS,
-                    ),
-                ],
-            ),
-        ]
+        ],
     ),
-    days=2,
-    annotations=[
-        annotation(
-            "WHOOP workouts",
-            'SELECT start AS time, "end" AS timeend, sport_name AS text FROM workouts '
-            "WHERE deleted_at IS NULL AND $__timeFilter(start)",
-            "orange",
-        )
-    ],
+    (
+        8,
+        [
+            series(
+                "Share of each day the band recorded",
+                f"SELECT {LOCAL_DAY} AS time, sum(seconds_recorded) / 86400.0 AS recorded "
+                f"FROM {MINUTES} AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+                bars=True,
+                unit="percentunit",
+            ),
+            series(
+                "Beats corrected per night (over 5% = poor HRV quality)",
+                f"SELECT wake_date::timestamp AS time, rr_corrected_share AS corrected "
+                f"FROM {BAND} AND $__timeFilter(wake_date::timestamp) ORDER BY 1",
+                bars=True,
+                unit="percentunit",
+            ),
+        ],
+    ),
+    (
+        8,
+        [
+            series(
+                "Average heart rate per WHOOP cycle: WHOOP vs band (cycles the band covered 95%+)",
+                CYCLE_CHECK.format(
+                    whoop="c.average_heart_rate",
+                    band="sum(m.hr_mean * m.seconds_with_hr) / nullif(sum(m.seconds_with_hr), 0)",
+                    name="Band",
+                )
+                + " ORDER BY 1",
+                drawStyle="points",
+                pointSize=8,
+            ),
+            series(
+                "Steps per WHOOP cycle: WHOOP vs the band's two counters (95%+ covered)",
+                CYCLE_CHECK.format(
+                    whoop="c.step_count", band="sum(m.steps)", name="Band step_counter"
+                )
+                + " UNION ALL "
+                + CYCLE_BAND.format(band="sum(m.steps_hw)", name="Band hw_step_counter")
+                + " ORDER BY 1",
+                drawStyle="points",
+                pointSize=8,
+            ),
+        ],
+    ),
+    (
+        8,
+        [
+            table(
+                "Band nights",
+                "SELECT wake_date, sleep_start, sleep_end, "
+                "round(rr_coverage::numeric, 3) AS rr_coverage, "
+                "round(rr_corrected_share::numeric, 3) AS corrected, rr_quality_ok, "
+                "round(rmssd_sleep_ms::numeric, 1) AS rmssd_sleep, "
+                "round(rmssd_fixed_ms::numeric, 1) AS rmssd_02_06, "
+                "round(resting_hr_median::numeric, 1) AS resting_hr, "
+                "round(respiratory_rate::numeric, 1) AS resp_rate, respiratory_windows, "
+                "round(spo2_mean::numeric, 1) AS spo2, "
+                "round(skin_temp_mean_c::numeric, 2) AS skin_temp, decoder_version, computed_at "
+                f"FROM {BAND} ORDER BY wake_date DESC LIMIT 30",
+            )
+        ],
+    ),
+]
+
+DATA_HEALTH = dashboard(
+    "whoop-data-health",
+    "Data health",
+    layout(PIPELINE_ROWS + BAND_QUALITY_ROWS),
+    days=30,
 )
 
+# The file name of the home dashboard is also in compose.yaml
+# (GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH).
 DASHBOARDS = {
+    "home.json": HOME,
     "data-health.json": DATA_HEALTH,
     "experiment-results.json": EXPERIMENT_RESULTS,
-    "nightly-health.json": NIGHTLY_HEALTH,
-    "day-view.json": DAY_VIEW,
 }
+
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)

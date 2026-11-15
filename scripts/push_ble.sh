@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copy Bluetooth captures from this Mac to the server and import nightly metrics into
-# ble_nights, where Grafana's "Nightly health" dashboard reads them.
+# ble_nights and ble_minutes, which Grafana's Health and Data health dashboards read.
 #
 #   ./scripts/push_ble.sh            # import captures from the last 3 days
 #   ./scripts/push_ble.sh --all      # recompute every night (after a metrics change)

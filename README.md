@@ -10,7 +10,7 @@ A self-hosted service that keeps a complete copy of your WHOOP data in Postgres 
 | `worker` | Refreshes the token, processes webhook events, polls cycles and reconciles the last 7 days every 3 hours. Draws tomorrow's arm each evening, alerts on a missing morning recovery at noon, and appends results at 13:00. |
 | `db` | Postgres 16. All state, and the job queue. |
 | `migrate` | Runs `alembic upgrade head` and `whoop-lab setup-db` (timezone, Grafana's read-only role) on every `up`, then exits. |
-| `grafana` | Four dashboards provisioned from `grafana/`: data health, experiment results, nightly health and day view. Served under `/grafana`, read-only database role, viewable without a second login. |
+| `grafana` | Three dashboards provisioned from `grafana/`: **Health** (the home page: WHOOP and band data together, the last 48 hours and 30-day trends), **Data health** (ingestion, band data quality and checks against WHOOP) and **Experiment results**. Served under `/grafana`, read-only database role, viewable without a second login. |
 
 `api` and `grafana` are published on `127.0.0.1` only (ports 8000 and 3001 by default; `API_PORT` and `GRAFANA_PORT` in `.env` change them). The tunnel is the only way in.
 
@@ -139,7 +139,7 @@ docker compose exec worker whoop-lab simulate
 
 ## Band data in Grafana
 
-Nightly metrics computed from the band's own Bluetooth records (see the `whoop-ble` skill) go to the `ble_nights` table and the **Nightly health** dashboard, beside WHOOP's values for the same nights. Per-minute summaries of the whole day (heart rate, state, activity, steps, movement, skin temperature) go to `ble_minutes` and the **Day view** dashboard. After draining the band on the Mac:
+Nightly metrics computed from the band's own Bluetooth records (see the `whoop-ble` skill) go to the `ble_nights` table, and per-minute summaries of the whole day (heart rate, state, activity, steps, movement, skin temperature) to `ble_minutes`. Both appear on the **Health** home dashboard beside WHOOP's values; their quality checks are on **Data health**. After draining the band on the Mac:
 
 ```sh
 ./scripts/push_ble.sh          # rsync captures/ to the server, then ble-import the last 3 days

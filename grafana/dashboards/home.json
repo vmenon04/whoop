@@ -1,0 +1,1156 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "name": "WHOOP workouts",
+        "datasource": {
+          "type": "postgres",
+          "uid": "whoop-pg"
+        },
+        "enable": true,
+        "iconColor": "orange",
+        "rawQuery": "SELECT start AS time, \"end\" AS timeend, sport_name AS text FROM workouts WHERE deleted_at IS NULL AND $__timeFilter(start)",
+        "target": {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT start AS time, \"end\" AS timeend, sport_name AS text FROM workouts WHERE deleted_at IS NULL AND $__timeFilter(start)",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "Anno"
+        }
+      }
+    ]
+  },
+  "templating": {
+    "list": []
+  },
+  "uid": "whoop-home",
+  "title": "Health",
+  "tags": [
+    "whoop-lab"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "editable": false,
+  "refresh": "5m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Recovery (WHOOP)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT recovery_score FROM daily_outcomes WHERE outcome_scored AND recovery_score IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 34,
+                "color": "yellow"
+              },
+              {
+                "value": 67,
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 1,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "HRV last night (WHOOP)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT hrv_rmssd_milli FROM daily_outcomes WHERE outcome_scored AND hrv_rmssd_milli IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Resting heart rate",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT resting_heart_rate FROM daily_outcomes WHERE outcome_scored AND resting_heart_rate IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Asleep last night (h)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT asleep_minutes / 60.0 FROM daily_outcomes WHERE outcome_sleep_id IS NOT NULL AND asleep_minutes / 60.0 IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Strain, latest day",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT day_strain FROM daily_outcomes WHERE TRUE AND day_strain IS NOT NULL ORDER BY local_date DESC LIMIT 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Steps today, to the last band sync",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT coalesce(sum(steps), 0) FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date = (now() AT TIME ZONE (SELECT local_timezone FROM app_config))::date",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      }
+    },
+    {
+      "type": "state-timeline",
+      "title": "Last 48 hours: asleep, still, awake, up (band)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT minute AS time, band_state AS state FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) ORDER BY 1",
+          "format": "table",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "SLEEP": {
+                  "color": "dark-blue",
+                  "index": 0
+                },
+                "STILL": {
+                  "color": "light-blue",
+                  "index": 1
+                },
+                "WAKE": {
+                  "color": "green",
+                  "index": 2
+                },
+                "UP": {
+                  "color": "orange",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "rowHeight": 0.8
+      },
+      "timeFrom": "2d",
+      "id": 7,
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Last 48 hours: heart rate per minute (bpm)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT minute AS time, hr_mean AS \"mean\", hr_min AS \"min\", hr_max AS \"max\" FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false,
+            "insertNulls": 120000
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "timeFrom": "2d",
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Last 48 hours: minutes walking and running, per 15 minutes",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT date_bin('15 minutes', minute, TIMESTAMPTZ '2000-01-01') AS time, sum(seconds_walk) / 60.0 AS walking, sum(seconds_run) / 60.0 AS running FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "timeFrom": "2d",
+      "id": 9,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Last 48 hours: skin temperature (C)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT minute AS time, skin_temp_c AS skin FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false,
+            "insertNulls": 120000
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "timeFrom": "2d",
+      "id": 10,
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Recovery (%)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, recovery_score AS recovery FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Day strain",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT local_date::timestamp AS time, day_strain AS strain FROM daily_outcomes WHERE day_strain IS NOT NULL AND $__timeFilter(local_date::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "HRV (ms): WHOOP and band. Different definitions: compare trends, not values",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, hrv_rmssd_milli AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND hrv_rmssd_milli IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', rmssd_sleep_ms FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND rmssd_sleep_ms IS NOT NULL ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Resting heart rate (bpm): WHOOP and band (sleep median)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, resting_heart_rate AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND resting_heart_rate IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', resting_hr_median FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND resting_hr_median IS NOT NULL ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 14,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sleep (hours): asleep and deep",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, asleep_minutes / 60.0 AS \"asleep\", deep_sleep_minutes / 60.0 AS \"deep\" FROM daily_outcomes WHERE outcome_sleep_id IS NOT NULL AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Sleep performance (%)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, sleep_performance_percentage AS performance FROM daily_outcomes WHERE sleep_performance_percentage IS NOT NULL AND $__timeFilter((local_date + 1)::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 16,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Steps per day (band)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date::timestamp AS time, sum(steps) AS steps FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 17,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Active minutes per day (band: walking or running)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (minute AT TIME ZONE (SELECT local_timezone FROM app_config))::date::timestamp AS time, sum(seconds_walk) / 60.0 AS walking, sum(seconds_run) / 60.0 AS running FROM ble_minutes WHERE minutes_version = 'ble-minutes-1' AND $__timeFilter(minute) GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 18,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 47
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Respiratory rate (breaths per minute): WHOOP and band",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, respiratory_rate AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND respiratory_rate IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', respiratory_rate FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND respiratory_rate IS NOT NULL ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 19,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 55
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Blood oxygen (%): WHOOP and band (band field disputed between sources)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, spo2_percentage AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND spo2_percentage IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', spo2_mean FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND spo2_mean IS NOT NULL ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 20,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Skin temperature overnight (C): WHOOP and band",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT (local_date + 1)::timestamp AS time, 'WHOOP' AS metric, skin_temp_celsius AS value FROM daily_outcomes WHERE outcome_scored AND $__timeFilter((local_date + 1)::timestamp) AND skin_temp_celsius IS NOT NULL UNION ALL SELECT wake_date::timestamp, 'Band (ble-nightly-2)', skin_temp_mean_c FROM ble_nights WHERE metrics_version = 'ble-nightly-2' AND $__timeFilter(wake_date::timestamp) AND skin_temp_mean_c IS NOT NULL ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 21,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 63
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Workout minutes per day (WHOOP)",
+      "datasource": {
+        "type": "postgres",
+        "uid": "whoop-pg"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "whoop-pg"
+          },
+          "rawSql": "SELECT local_date::timestamp AS time, workout_minutes AS workouts FROM daily_outcomes WHERE $__timeFilter(local_date::timestamp) ORDER BY 1",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "id": 22,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      }
+    }
+  ]
+}
