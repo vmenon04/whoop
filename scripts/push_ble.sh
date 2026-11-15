@@ -21,6 +21,7 @@ if [ ! -d captures ]; then
 fi
 
 # The worker container reads the files as its own user, so they must be readable.
+# Symbolic modes: the rsync 2.6.9 that ships with macOS rejects numeric ones.
 ssh "$host" "mkdir -p '$dir/captures'"
-rsync -a --chmod=D755,F644 captures/ "$host:$dir/captures/"
+rsync -a --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r captures/ "$host:$dir/captures/"
 ssh -t "$host" "cd '$dir' && sudo docker compose exec -T worker whoop-lab ble-import $(printf '%q ' "$@")"
