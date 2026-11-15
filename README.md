@@ -6,7 +6,7 @@ A self-hosted service that keeps a complete copy of your WHOOP data in Postgres 
 
 | Service | What it does |
 | --- | --- |
-| `api` | `/today`, `/experiments`, status page, OAuth start/callback, webhook receiver, `/healthz`, `/uptime`. Never calls WHOOP except for the one-time code exchange. |
+| `api` | `/` (sends you to the Health dashboard), `/today`, `/experiments`, `/status`, OAuth start/callback, webhook receiver, `/healthz`, `/uptime`. Never calls WHOOP except for the one-time code exchange. |
 | `worker` | Refreshes the token, processes webhook events, polls cycles and reconciles the last 7 days every 3 hours. Draws tomorrow's arm each evening, alerts on a missing morning recovery at noon, and appends results at 13:00. |
 | `db` | Postgres 16. All state, and the job queue. |
 | `migrate` | Runs `alembic upgrade head` and `whoop-lab setup-db` (timezone, Grafana's read-only role) on every `up`, then exits. |
@@ -82,13 +82,13 @@ docker compose up -d --build
 docker compose ps                         # migrate should show "exited (0)"
 ```
 
-Open <https://whoop.vasumenon.com/>, pass the Access login, press **Connect WHOOP** and approve. Then load your history:
+Open <https://whoop.vasumenon.com/status>, pass the Access login, press **Connect WHOOP** and approve. Then load your history:
 
 ```sh
 docker compose exec worker whoop-lab backfill
 ```
 
-The status page shows row counts, the last webhook and recent syncs.
+The status page (`/status`) shows row counts, the last webhook and recent syncs. The front page, `/`, opens the **Health** dashboard.
 
 ## Running an experiment
 

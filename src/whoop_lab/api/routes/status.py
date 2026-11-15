@@ -1,11 +1,14 @@
-"""Landing page: is the token alive and is data arriving. Reads the database only."""
+"""Status page: is the token alive and is data arriving. Reads the database only.
+
+The site's front page is the Health dashboard in Grafana; `/` sends you there.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 
 from whoop_lab.api.templating import templates
@@ -14,7 +17,17 @@ from whoop_lab.models import Cycle, OAuthToken, Recovery, Sleep, SyncRun, Webhoo
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
+# Grafana's home dashboard (Health), served under /grafana by the same tunnel.
+HOME_URL = "/grafana/"
+
+
+@router.get("/")
+async def home() -> Response:
+    """The front page is the Health dashboard. 302, so browsers never cache the move."""
+    return RedirectResponse(HOME_URL, status_code=302)
+
+
+@router.get("/status", response_class=HTMLResponse)
 async def status(request: Request) -> Response:
     tz = request.app.state.settings.tz
     async with request.app.state.session_factory() as session:

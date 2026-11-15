@@ -10,7 +10,7 @@ from whoop_lab.models import SyncRun
 
 
 async def test_status_page_before_connecting(api: httpx.AsyncClient) -> None:
-    response = await api.get("/")
+    response = await api.get("/status")
     assert response.status_code == 200
     assert "Connect WHOOP" in response.text
     assert "No sync has run yet" in response.text
@@ -24,7 +24,7 @@ async def test_status_page_shows_counts_and_never_tokens(
         await upsert.upsert_sleep(session, payloads.sleep())
         session.add(SyncRun(kind="reconcile", rows_upserted=3, error="sleep: HTTP 500"))
 
-    response = await api.get("/")
+    response = await api.get("/status")
 
     assert response.status_code == 200
     assert "Connected." in response.text
@@ -37,7 +37,7 @@ async def test_status_page_prompts_for_reauth(
     api: httpx.AsyncClient, session_factory: SessionFactory
 ) -> None:
     await seed_token(session_factory, status="reauth_required")
-    response = await api.get("/")
+    response = await api.get("/status")
     assert "Reconnect WHOOP" in response.text
 
 
@@ -46,3 +46,9 @@ async def test_privacy_page_is_static(api: httpx.AsyncClient) -> None:
     assert response.status_code == 200
     assert "Privacy policy" in response.text
     assert "set-cookie" not in response.headers
+
+
+async def test_the_front_page_is_the_health_dashboard(api: httpx.AsyncClient) -> None:
+    response = await api.get("/", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/grafana/"
