@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from whoop_lab.ble.metrics import METRICS_VERSION
+
 DS = {"type": "postgres", "uid": "whoop-pg"}
 OUT = Path(__file__).resolve().parent.parent / "grafana" / "dashboards"
 
@@ -356,7 +358,129 @@ EXPERIMENT_RESULTS = dashboard(
     variables=[EXPERIMENT_VARIABLE],
 )
 
-DASHBOARDS = {"data-health.json": DATA_HEALTH, "experiment-results.json": EXPERIMENT_RESULTS}
+# Band metrics are shown for the current metrics version only: regenerate after a bump.
+BAND = f"ble_nights WHERE metrics_version = '{METRICS_VERSION}'"
+WAKE = "(local_date + 1)::timestamp"
+
+
+def both(whoop_column: str, band_column: str) -> str:
+    """WHOOP's value and the band's for each wake date, as two series."""
+    return (
+        f"SELECT {WAKE} AS time, 'WHOOP' AS metric, {whoop_column} AS value "
+        f"FROM daily_outcomes WHERE outcome_scored AND $__timeFilter({WAKE}) "
+        f"AND {whoop_column} IS NOT NULL "
+        "UNION ALL "
+        f"SELECT wake_date::timestamp, 'Band ({METRICS_VERSION})', {band_column} "
+        f"FROM {BAND} AND $__timeFilter(wake_date::timestamp) AND {band_column} IS NOT NULL "
+        "ORDER BY 1"
+    )
+
+
+NIGHTLY_HEALTH = dashboard(
+    "whoop-nightly-health",
+    "Nightly health",
+    layout(
+        [
+            (
+                4,
+                [
+                    stat(
+                        "Days since the last band night",
+                        f"SELECT current_date - max(wake_date) FROM {BAND}",
+                        steps=[(None, "green"), (2, "orange"), (4, "red")],
+                    ),
+                    stat(
+                        "Beats corrected, last band night (over 5% = poor)",
+                        f"SELECT rr_corrected_share FROM {BAND} ORDER BY wake_date DESC LIMIT 1",
+                        unit="percentunit",
+                        steps=[(None, "green"), (0.05, "red")],
+                    ),
+                    stat(
+                        "HRV last night, WHOOP (ms)",
+                        "SELECT hrv_rmssd_milli FROM daily_outcomes WHERE outcome_scored "
+                        "ORDER BY local_date DESC LIMIT 1",
+                        unit="ms",
+                        steps=[(None, "text")],
+                    ),
+                    stat(
+                        "HRV last night, band (ms)",
+                        f"SELECT rmssd_sleep_ms FROM {BAND} ORDER BY wake_date DESC LIMIT 1",
+                        unit="ms",
+                        steps=[(None, "text")],
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "HRV, RMSSD over the night (ms). Different definitions: compare trends, not values",
+                        both("hrv_rmssd_milli", "rmssd_sleep_ms"),
+                        unit="ms",
+                    ),
+                    series(
+                        "Resting heart rate (bpm); band: median over the sleep window",
+                        both("resting_heart_rate", "resting_hr_median"),
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "Respiratory rate (breaths per minute)",
+                        both("respiratory_rate", "respiratory_rate"),
+                    ),
+                    series(
+                        "Blood oxygen (%); band field disputed between sources",
+                        both("spo2_percentage", "spo2_mean"),
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    series(
+                        "Skin temperature (C)",
+                        both("skin_temp_celsius", "skin_temp_mean_c"),
+                    ),
+                    series(
+                        "Beats corrected per night (over 5% = poor HRV quality)",
+                        f"SELECT wake_date::timestamp AS time, rr_corrected_share AS corrected "
+                        f"FROM {BAND} AND $__timeFilter(wake_date::timestamp) ORDER BY 1",
+                        bars=True,
+                        unit="percentunit",
+                    ),
+                ],
+            ),
+            (
+                8,
+                [
+                    table(
+                        "Band nights",
+                        "SELECT wake_date, sleep_start, sleep_end, "
+                        "round(rr_coverage::numeric, 3) AS rr_coverage, "
+                        "round(rr_corrected_share::numeric, 3) AS corrected, rr_quality_ok, "
+                        "round(rmssd_sleep_ms::numeric, 1) AS rmssd_sleep, "
+                        "round(rmssd_fixed_ms::numeric, 1) AS rmssd_02_06, "
+                        "round(resting_hr_median::numeric, 1) AS resting_hr, "
+                        "round(respiratory_rate::numeric, 1) AS resp_rate, respiratory_windows, "
+                        "round(spo2_mean::numeric, 1) AS spo2, "
+                        "round(skin_temp_mean_c::numeric, 2) AS skin_temp, decoder_version, computed_at "
+                        f"FROM {BAND} ORDER BY wake_date DESC LIMIT 30",
+                    )
+                ],
+            ),
+        ]
+    ),
+    days=30,
+)
+
+DASHBOARDS = {
+    "data-health.json": DATA_HEALTH,
+    "experiment-results.json": EXPERIMENT_RESULTS,
+    "nightly-health.json": NIGHTLY_HEALTH,
+}
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
