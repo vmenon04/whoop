@@ -43,7 +43,7 @@
 {% block nav %}
 {% set here = request.url.path %}
 <nav>
-  <a href="/grafana/" hx-boost="false">Health</a>
+  <a href="{{ request.app.state.settings.grafana_home }}" hx-boost="false">Health</a>
   <a href="/today" class="{{ 'here' if here.startswith('/today') }}">Today</a>
   <a href="/experiments" class="{{ 'here' if here.startswith('/experiments') }}">Experiments</a>
   <a href="/status" class="{{ 'here' if here.startswith('/status') }}">Status</a>

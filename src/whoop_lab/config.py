@@ -37,7 +37,11 @@ class Settings(BaseSettings):
 
     whoop_client_id: str
     whoop_client_secret: SecretStr
-    public_base_url: str = "https://whoop.vasumenon.com"
+    # Where this app is reached in a browser; WHOOP redirects here after sign-in.
+    public_base_url: str = "http://localhost:8000"
+    # Grafana's address, if not `public_base_url` + /grafana/ (a tunnel routes that path to
+    # Grafana). Locally, without a tunnel: http://localhost:3001/grafana/.
+    grafana_url: str | None = None
 
     whoop_auth_url: str = "https://api.prod.whoop.com/oauth/oauth2/auth"
     whoop_token_url: str = "https://api.prod.whoop.com/oauth/oauth2/token"
@@ -131,6 +135,10 @@ class Settings(BaseSettings):
     @property
     def tag_key_list(self) -> list[str]:
         return [key.strip() for key in self.tag_keys.split(",") if key.strip()]
+
+    @property
+    def grafana_home(self) -> str:
+        return self.grafana_url or "/grafana/"
 
     @property
     def redirect_uri(self) -> str:

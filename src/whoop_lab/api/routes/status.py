@@ -17,14 +17,11 @@ from whoop_lab.models import Cycle, OAuthToken, Recovery, Sleep, SyncRun, Webhoo
 router = APIRouter()
 
 
-# Grafana's home dashboard (Health), served under /grafana by the same tunnel.
-HOME_URL = "/grafana/"
-
-
 @router.get("/")
-async def home() -> Response:
-    """The front page is the Health dashboard. 302, so browsers never cache the move."""
-    return RedirectResponse(HOME_URL, status_code=302)
+async def home(request: Request) -> Response:
+    """The front page is Grafana's home dashboard (Health). 302, so browsers never cache
+    the move."""
+    return RedirectResponse(request.app.state.settings.grafana_home, status_code=302)
 
 
 @router.get("/status", response_class=HTMLResponse)

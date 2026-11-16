@@ -11,10 +11,11 @@ x-app: &app
     POSTGRES_DB: ${POSTGRES_DB}
     WHOOP_CLIENT_ID: ${WHOOP_CLIENT_ID}
     WHOOP_CLIENT_SECRET: ${WHOOP_CLIENT_SECRET}
-    PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://whoop.vasumenon.com}
+    PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
     LOCAL_TIMEZONE: ${LOCAL_TIMEZONE:-America/New_York}
     NTFY_URL: ${NTFY_URL:-}
     NTFY_TOKEN: ${NTFY_TOKEN:-}
+    GRAFANA_URL: ${GRAFANA_URL:-}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
     GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-}
     ASSIGN_HOUR: ${ASSIGN_HOUR:-20}
@@ -65,9 +66,9 @@ services:
     <<: *app
     command: ["python", "-m", "whoop_lab.worker.main"]
     volumes:
-      # Bluetooth captures pushed from the Mac by scripts/push_ble.sh, for `whoop-lab
-      # ble-import`. Biometric data: git-ignored, never committed.
-      - ./captures:/captures:ro
+      # Bluetooth captures (optional; see docs/band.md), imported by the worker.
+      # Biometric data: git-ignored, never committed.
+      - ${CAPTURES_DIR:-./captures}:/captures:ro
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -76,7 +77,7 @@ services:
     image: grafana/grafana-oss:${GRAFANA_VERSION:-12.0.0}
     restart: unless-stopped
     environment:
-      GF_SERVER_ROOT_URL: ${PUBLIC_BASE_URL:-https://whoop.vasumenon.com}/grafana/
+      GF_SERVER_ROOT_URL: ${GRAFANA_URL:-${PUBLIC_BASE_URL:-http://localhost:8000}/grafana/}
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_USERS_ALLOW_SIGN_UP: "false"
