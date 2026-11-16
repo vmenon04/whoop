@@ -19,7 +19,7 @@ A self-hosted service that keeps a complete copy of your WHOOP data in Postgres 
 Requirements on the server: Docker with Compose, and a Cloudflare Tunnel.
 
 ```sh
-git clone https://github.com/vmenon04/whoop-lab.git && cd whoop-lab
+git clone https://github.com/vmenon04/whoop.git && cd whoop
 cp .env.example .env        # then edit: the three passwords now, WHOOP credentials after step 3
 chmod 600 .env
 ```
