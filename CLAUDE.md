@@ -12,7 +12,7 @@ uv run pytest                             # needs Docker running (testcontainers
 uv run pytest tests/test_events.py -k backoff
 ./scripts/gen_models.sh                   # regenerate src/whoop_lab/whoop/generated.py from the spec
 uv run alembic revision -m "..."          # then write the migration by hand
-docker compose up -d --build              # db, migrate, api, worker, grafana
+docker compose up -d --build              # local stack; production is deployed by vmenon04/homelab from released images (README: Deploying)
 docker compose exec worker whoop-lab backfill [--since YYYY-MM-DD]
 docker compose exec worker whoop-lab sync [--days N]
 docker compose exec worker whoop-lab power --outcome ln_hrv_rmssd --days 28
@@ -20,7 +20,7 @@ docker compose exec worker whoop-lab analyze <name-or-id>
 uv run whoop-lab simulate                 # analysis validation; needs no database
 uv run --group ble python scripts/ble_spike.py --help   # talk to the band (see the whoop-ble skill)
 uv run whoop-lab ble-nights captures/*   # nightly metrics from Bluetooth captures; needs no database
-./scripts/push_ble.sh [--all]             # copy captures to the server and ble-import them into ble_nights
+./scripts/push_ble.sh                     # copy captures to the server; the worker imports them
 uv run python scripts/gen_dashboards.py   # regenerate grafana/dashboards/*.json
 ```
 

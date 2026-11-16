@@ -125,7 +125,7 @@ docker compose exec worker whoop-lab simulate
 | Reconcile now | `docker compose exec worker whoop-lab sync` |
 | Recompute results now | `docker compose exec worker whoop-lab analyze "<experiment name>"` |
 | Backfill from a date | `docker compose exec worker whoop-lab backfill --since 2025-01-01` |
-| Update | `git pull && docker compose up -d --build` |
+| Update | release a version and bump it in vmenon04/homelab (see [Deploying](#deploying)) |
 | Queue state | `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB" -c "select status, count(*) from webhook_events group by 1"'` |
 
 **If WHOOP rejects a token refresh** the worker stops calling WHOOP, the status page shows **Reconnect WHOOP**, and if `NTFY_URL` is set you get one notification. Sign in again from the status page. Missed data is picked up by the next reconcile (it looks back 7 days; for a longer outage run `whoop-lab backfill --since <date>`).
@@ -137,16 +137,27 @@ docker compose exec worker whoop-lab simulate
 
 **Notifications** are optional. Set `NTFY_URL` to a full topic URL, either `https://ntfy.sh/<long-random-topic>` or a self-hosted ntfy (`--profile ntfy` starts one on `127.0.0.1:8080`).
 
+## Deploying
+
+The server runs the published images, deployed by [vmenon04/homelab](https://github.com/vmenon04/homelab) (`machines/slimjim/whoop/`), which holds the production compose file, its settings and its SOPS-encrypted secrets. `compose.yaml` here is for running the stack locally.
+
+Every push runs ruff, mypy, pytest, a check that the dashboards match `scripts/gen_dashboards.py`, a gitleaks scan of the history, and builds both images (`.github/workflows/ci.yml`). To release:
+
+1. Set `version` in `pyproject.toml` (say `0.2.0`), commit, then `git tag v0.2.0 && git push origin main v0.2.0`.
+2. CI publishes `ghcr.io/vmenon04/whoop:0.2.0` (api, worker, migrations) and `ghcr.io/vmenon04/whoop-grafana:0.2.0` (Grafana with the datasource and dashboards built in).
+3. In homelab, change both tags in `machines/slimjim/whoop/compose.yml` and push. Its runner pulls the images, runs migrations and waits for the api to be healthy.
+
+The packages are private, like this repo. homelab's deploy job logs in to GHCR with its own workflow token, which works once each package grants it access: on GitHub, open the package, then Package settings → Manage Actions access → add `vmenon04/homelab` with the Read role.
+
 ## Band data in Grafana
 
 Nightly metrics computed from the band's own Bluetooth records (see the `whoop-ble` skill) go to the `ble_nights` table, and per-minute summaries of the whole day (heart rate, state, activity, steps, movement, skin temperature) to `ble_minutes`. Both appear on the **Health** home dashboard beside WHOOP's values; their quality checks are on **Data health**. After draining the band on the Mac:
 
 ```sh
-./scripts/push_ble.sh          # rsync captures/ to the server, then ble-import the last 3 days
-./scripts/push_ble.sh --all    # recompute every night, e.g. after a metrics version change
+./scripts/push_ble.sh          # rsync captures/ to slimjim:/srv/whoop/captures
 ```
 
-Run it in a normal terminal: the import uses `sudo docker` on the server, which asks for a password. Captures are copied to `captures/` next to the server checkout (git-ignored, readable by the worker container) and mounted read-only into the worker. Create that directory as your own user before the first `docker compose up`, or Docker creates it owned by root and rsync cannot write to it. Rows are keyed by night and metrics version; the dashboard shows the current version, so regenerate it (`scripts/gen_dashboards.py`) after a version change.
+The worker checks that folder (mounted read-only at `/captures`) every five minutes and imports captures from the last three days whenever they change. Create it as your own user before the first deploy, or Docker creates it owned by root and rsync cannot write to it. After a metrics version change, recompute every night with `sudo docker exec whoop-worker-1 whoop-lab ble-import --all` on the server. Rows are keyed by night and metrics version; the dashboard shows the current version, so regenerate it (`scripts/gen_dashboards.py`) after a version change.
 
 ## Backup and restore
 
