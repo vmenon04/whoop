@@ -2,6 +2,8 @@
 name = "whoop-lab"
 version = "0.1.0"
 description = "Self-hosted WHOOP archive and n-of-1 experiment runner"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.20.1",
