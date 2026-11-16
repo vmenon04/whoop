@@ -2,7 +2,7 @@ name: ci
 
 # Every push and pull request is checked and both images are built. A version tag
 # (v0.2.0), once the checks pass, publishes ghcr.io/vmenon04/whoop:0.2.0 and
-# ghcr.io/vmenon04/whoop-grafana:0.2.0, the versions vmenon04/homelab deploys.
+# ghcr.io/vmenon04/whoop-grafana:0.2.0, for running without a checkout.
 
 on:
   push:

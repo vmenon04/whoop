@@ -120,4 +120,4 @@ whoop-vault documents 22 with no argument and wearable5.0 with `00`; after zero-
 ## Platform notes
 
 - macOS: bleak cannot pair explicitly. The system pairs when an encrypted characteristic is first used, and may show a prompt. The terminal needs Bluetooth permission, and without it the first scan hangs silently; `ble_spike.py` checks for that. Device addresses are per-Mac UUIDs.
-- Linux: needs BlueZ and an adapter (the server has neither). whoop-vault's working order is: agent `NoInputNoOutput`, keep `scan on` running, then `trust`, `connect`, `pair`. DISPUTED minimum BlueZ version: 5.66 or 5.85.
+- Linux: needs BlueZ and an adapter (untested by this project). whoop-vault's working order is: agent `NoInputNoOutput`, keep `scan on` running, then `trust`, `connect`, `pair`. DISPUTED minimum BlueZ version: 5.66 or 5.85.
