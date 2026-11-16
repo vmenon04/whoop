@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from whoop_lab.ble.importer import CaptureWatcher
 from whoop_lab.experiments.jobs import assign_tomorrow, run_daily_analysis
 from whoop_lab.health import check_morning_recovery
 from whoop_lab.ingest.events import drain_events
@@ -52,3 +53,17 @@ async def assign_tomorrow_job(ctx: WorkerContext) -> bool:
 
 async def daily_analysis_job(ctx: WorkerContext) -> int:
     return len(await run_daily_analysis(ctx.session_factory, ctx.settings))
+
+
+async def import_captures_job(ctx: WorkerContext, watcher: CaptureWatcher) -> bool:
+    """Imports band captures when new ones have been copied to the server."""
+    summary = await watcher.check(ctx.session_factory)
+    if summary is None:
+        return False
+    log.info(
+        "imported %d captures: %d nights and %d minutes written",
+        len(summary.files),
+        summary.nights_written,
+        summary.minutes_written,
+    )
+    return True

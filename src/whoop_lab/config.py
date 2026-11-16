@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -71,6 +72,12 @@ class Settings(BaseSettings):
     event_batch_size: int = 10
     event_max_attempts: int = 8
     event_backoff_base_seconds: int = 30
+
+    # Bluetooth captures copied to the server (scripts/push_ble.sh). The worker imports
+    # those taken in the last `capture_import_days` days whenever they change.
+    captures_dir: Path = Path("/captures")
+    capture_poll_minutes: int = 5
+    capture_import_days: int = 3
 
     # Polling and reconciliation.
     reconcile_interval_hours: int = 3

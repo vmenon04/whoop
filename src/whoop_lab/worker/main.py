@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from whoop_lab.ble.importer import CaptureWatcher
 from whoop_lab.config import Settings, get_settings
 from whoop_lab.db import make_engine, make_session_factory
 from whoop_lab.log import configure_logging
@@ -84,6 +85,18 @@ def build_scheduler(ctx: WorkerContext) -> AsyncIOScheduler:
         minute=0,
         timezone=settings.tz,
         id="daily_analysis",
+    )
+    watcher = CaptureWatcher(settings.captures_dir, settings.capture_import_days, settings.tz)
+
+    async def import_captures(ctx: WorkerContext) -> bool:
+        return await jobs.import_captures_job(ctx, watcher)
+
+    scheduler.add_job(
+        _guarded(import_captures, ctx),
+        "interval",
+        minutes=settings.capture_poll_minutes,
+        next_run_time=now + timedelta(minutes=3),
+        id="import_captures",
     )
     return scheduler
 

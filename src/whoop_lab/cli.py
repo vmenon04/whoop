@@ -29,15 +29,10 @@ from whoop_lab.analysis.simulate import (
 )
 from whoop_lab.ble.capture import NOTIFICATIONS_FILE
 from whoop_lab.ble.decode import DECODER_VERSION, load_biometrics
+from whoop_lab.ble.importer import import_captures
 from whoop_lab.ble.metrics import METRICS_VERSION, nightly
-from whoop_lab.ble.minutes import MINUTES_VERSION, minutes
-from whoop_lab.ble.store import (
-    describe_files,
-    recent_captures,
-    since_days,
-    store_minutes,
-    store_nights,
-)
+from whoop_lab.ble.minutes import MINUTES_VERSION
+from whoop_lab.ble.store import describe_files, recent_captures, since_days
 from whoop_lab.config import get_settings
 from whoop_lab.db import make_engine, make_session_factory
 from whoop_lab.experiments.outcomes import OUTCOMES
@@ -341,22 +336,20 @@ async def _ble_import(captures_dir: Path, days: int | None) -> None:
     tz = ZoneInfo(settings.local_timezone)
     files = recent_captures(captures_dir, since_days(days), tz)
     typer.echo(f"captures read: {describe_files(files)}")
-    records = load_biometrics(files)
-    nights = nightly(records, tz)
-    summaries = minutes(records)
     engine = make_engine(settings.db_url)
     try:
-        session_factory = make_session_factory(engine)
-        stored = await store_nights(session_factory, nights, DECODER_VERSION)
-        stored_minutes = await store_minutes(session_factory, summaries, DECODER_VERSION)
+        summary = await import_captures(make_session_factory(engine), files, tz)
     finally:
         await engine.dispose()
-    dates = ", ".join(str(night.wake_date) for night in nights) or "none"
+    dates = ", ".join(str(night.wake_date) for night in summary.nights) or "none"
     typer.echo(
-        f"{len(records)} per-second records; {METRICS_VERSION}; nights found: {dates}; "
-        f"rows written: {stored}"
+        f"{summary.records} per-second records; {METRICS_VERSION}; nights found: {dates}; "
+        f"rows written: {summary.nights_written}"
     )
-    typer.echo(f"{MINUTES_VERSION}: {len(summaries)} minutes found; rows written: {stored_minutes}")
+    typer.echo(
+        f"{MINUTES_VERSION}: {summary.minutes} minutes found; "
+        f"rows written: {summary.minutes_written}"
+    )
 
 
 @app.command("ble-import")

@@ -61,4 +61,5 @@ async def test_scheduler_declares_jobs(
         "morning_recovery",
         "assign_tomorrow",
         "daily_analysis",
+        "import_captures",
     } == {job.id for job in scheduler.get_jobs()}
