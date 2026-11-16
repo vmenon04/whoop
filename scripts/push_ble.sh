@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# Copy Bluetooth captures from this Mac to the server. The worker there checks every few
-# minutes and imports captures from the last three days into ble_nights and ble_minutes
-# whenever they change; nothing else needs running.
+# Copy Bluetooth captures from this computer to the server that runs the stack. The worker
+# there checks every few minutes and imports captures from the last three days whenever
+# they change; nothing else needs running. Not needed if the stack runs on this computer.
 #
-#   ./scripts/push_ble.sh
+#   WHOOP_HOST=myserver WHOOP_CAPTURES=/path/to/captures ./scripts/push_ble.sh
 #
-# To recompute every night (after a metrics version change), run on the server:
-#   sudo docker exec whoop-worker-1 whoop-lab ble-import --all
-#
-# WHOOP_HOST (default slimjim) and WHOOP_CAPTURES (default /srv/whoop/captures) override
-# where the captures go; the worker mounts that folder read-only at /captures.
+# WHOOP_HOST is an ssh destination. WHOOP_CAPTURES is the server folder the worker mounts
+# at /captures (CAPTURES_DIR in the server's .env; default whoop/captures, relative to
+# your home folder there).
 set -euo pipefail
 
-host="${WHOOP_HOST:-slimjim}"
-dest="${WHOOP_CAPTURES:-/srv/whoop/captures}"
+host="${WHOOP_HOST:?set WHOOP_HOST to the ssh name of the server}"
+dest="${WHOOP_CAPTURES:-whoop/captures}"
 cd "$(dirname "$0")/.."
 
 if [ ! -d captures ]; then
