@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>vmenon04/renovate-config"],
+  "packageRules": [
+    {
+      "description": "A new Postgres major can't read the old one's data: upgrade it by hand, with a dump and restore.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
+}
