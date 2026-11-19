@@ -293,6 +293,18 @@ class Session:
         return data_range
 
 
+STALE_BOND_HELP = """\
+This Mac still holds a bond the band has since deleted: re-pairing the WHOOP app replaces
+  it, since the band keeps only one. macOS will not pair again on its own, and nothing here
+  can remove a bond for it.
+  1. On the Mac: System Settings, Bluetooth, WHOOP, Forget This Device.
+  2. Run this again (with the band flashing blue if it asks)."""
+
+
+class StaleBondError(Exception):
+    """macOS refused to connect because the band discarded this Mac's bond."""
+
+
 async def connect(device: Any, connect_seconds: float) -> Any:
     from bleak import BleakClient
 
@@ -300,6 +312,9 @@ async def connect(device: Any, connect_seconds: float) -> Any:
     try:
         await client.connect()
     except Exception as exc:
+        # CBErrorDomain code 14, CBErrorPeerRemovedPairingInformation. Retrying can't help.
+        if "Code=14" in str(exc) or "Peer removed pairing information" in str(exc):
+            raise StaleBondError from exc
         say(f"Could not connect: {type(exc).__name__}: {exc}")
         return None
     say("Connected")
@@ -357,7 +372,11 @@ async def stage_hr(args: argparse.Namespace) -> int:
     device = await find_band(args.timeout)
     if device is None:
         return 2
-    client = await connect(device, args.timeout)
+    try:
+        client = await connect(device, args.timeout)
+    except StaleBondError:
+        say(STALE_BOND_HELP)
+        return 3
     if client is None:
         return 3
     directory = new_capture_directory("hr")
@@ -412,7 +431,11 @@ async def open_session(args: argparse.Namespace, stage: str) -> tuple[Any, Sessi
         device = await find_band(args.timeout)
         if device is None:
             return None
-        client = await connect(device, args.timeout)
+        try:
+            client = await connect(device, args.timeout)
+        except StaleBondError:
+            say(STALE_BOND_HELP)
+            return None
         if client is None:
             await asyncio.sleep(2)
             continue
